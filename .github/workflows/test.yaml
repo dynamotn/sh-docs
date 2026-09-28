@@ -1,0 +1,39 @@
+name: test
+on: [push, pull_request]
+
+jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install gawk
+        run: sudo apt-get update && sudo apt-get install -y gawk
+      - name: Run tests
+        run: make test
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Install tools
+        run: |
+          sudo apt-get update && sudo apt-get install -y gawk shellcheck
+          go install mvdan.cc/sh/v3/cmd/shfmt@latest
+          go install gitlab.com/dynamo-tools/dyshellint/cmd/dyshellint@latest
+      - name: Lint
+        run: make lint
+
+  examples:
+    name: Examples are up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install gawk
+        run: sudo apt-get update && sudo apt-get install -y gawk
+      - name: Regenerate and compare
+        run: make check-examples
