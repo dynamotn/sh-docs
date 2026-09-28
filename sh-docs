@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+# @file sh-docs
+# @brief Generate Markdown API documentation from shell doc comments.
+# @description Reads a shell script from a file or from standard input and
+#   writes GitHub-flavored Markdown. All the real work happens in
+#   `sh-docs.awk`; this wrapper only locates it, translates command-line
+#   options into awk variables, and keeps the exit status meaningful.
+# @usage
+#   ```bash
+#   sh-docs < src/strings.sh > docs/strings.md
+#   sh-docs --source-path lib/strings.sh lib/strings.sh -o docs/strings.md
+#   ```
+# @env SH_DOCS_AWK string Path of the awk program, when it is not the
+#   `sh-docs.awk` next to this script.
+# @see
+#   - sh-docs.awk
+# @license MIT
+
+set -euo pipefail
+
+readonly SH_DOCS_VERSION='1.0.0'
+
+# The awk program sits next to this script when running from a checkout, and in
+# its own share directory once installed.
+readonly SELF="${BASH_SOURCE[0]}"
+SELF_DIR="$(cd "$(dirname "$(readlink -f "${SELF}")")" && pwd)"
+readonly SELF_DIR
+readonly AWK_PROGRAM="${SH_DOCS_AWK:-${SELF_DIR}/sh-docs.awk}"
+
+# @description Print the usage summary.
+# @noargs
+# @stdout The usage summary
+function _usage {
+  cat << 'EOF'
+Usage: sh-docs [OPTION]... [FILE]
+
+Generate Markdown API documentation from the doc comments of a shell script.
+FILE defaults to standard input; the document is written to standard output
+unless --output is given.
+
+Options:
+  -o, --output FILE         write the document to FILE instead of stdout
+      --src-dir DIR         directory the documented sources live in
+                            (default: src)
+      --doc-dir DIR         directory the generated documents live in, used to
+                            resolve relative links (default: docs)
+      --root-files LIST     comma-separated sources that sit at the repository
+                            root instead of inside --src-dir (default: init.sh)
+      --source-path PATH    path of the documented source relative to the
+                            repository root; overrides --src-dir/--root-files
+      --link-dirs LIST      comma-separated path prefixes that @see entries are
+                            resolved as paths rather than as anchors
+                            (default: docs,example,src,scripts)
+      --example-dir DIR     scan DIR for examples that mention a documented
+                            function and list them under "Related examples"
+      --example-prefix DIR  prefix the scanned examples are linked under
+                            (default: example)
+  -h, --help                show this help and exit
+  -V, --version             show version information and exit
+
+Examples:
+  sh-docs < lib.sh > docs/lib.md
+  sh-docs --source-path lib/strings.sh lib/strings.sh -o docs/strings.md
+EOF
+}
+
+# @description Report a fatal error and stop.
+# @arg $1 string The message to report
+# @stderr The message, prefixed with the program name
+# @exitcode 1 Always
+function _die {
+  printf 'sh-docs: %s\n' "$1" >&2
+  exit 1
+}
+
+# @description Stop unless an option was given the argument it needs.
+# @arg $1 string The option, as it was written
+# @arg $2 number The number of arguments still unparsed, the option included
+# @exitcode 0 The argument is there
+# @exitcode 1 The argument is missing
+function _need_value {
+  (($2 >= 2)) || _die "option $1 requires an argument"
+}
+
+# @description Turn a long option into the awk variable it sets: `--src-dir`
+#   becomes `src_dir`. Only the option name is rewritten, so a value such as
+#   `my-examples` keeps its dashes.
+# @arg $1 string The long option, leading dashes included
+# @stdout The awk variable name
+function _awk_var {
+  local _name="${1#--}"
+  printf '%s' "${_name//-/_}"
+}
+
+# @description Parse the command line and render the document.
+# @arg $@ any The command line, as given to the script
+# @stdout The generated document, unless --output was given
+# @exitcode 0 The document was generated
+# @exitcode 1 The invocation was invalid, the input was unreadable, or awk
+#   failed
+function _main {
+  local _input='' _output='' _rendered
+  local -a _awk_vars=() _inputs=() _awk_input=()
+
+  # dyshellint disable=BSG051 sh-docs depends on gawk and bash alone, by
+  # design, so the spec helpers the guide points at are not available here.
+  while (($#)); do
+    case "$1" in
+      -h | --help)
+        _usage
+        return 0
+        ;;
+      -V | --version)
+        printf 'sh-docs %s\n' "${SH_DOCS_VERSION}"
+        return 0
+        ;;
+      -o | --output)
+        _need_value "$1" $#
+        _output="$2"
+        shift 2
+        ;;
+      --output=*)
+        _output="${1#*=}"
+        shift
+        ;;
+      --src-dir | --doc-dir | --root-files | --source-path | --link-dirs | \
+        --example-dir | --example-prefix)
+        _need_value "$1" $#
+        _awk_vars+=(-v "$(_awk_var "$1")=$2")
+        shift 2
+        ;;
+      --src-dir=* | --doc-dir=* | --root-files=* | --source-path=* | \
+        --link-dirs=* | --example-dir=* | --example-prefix=*)
+        _awk_vars+=(-v "$(_awk_var "${1%%=*}")=${1#*=}")
+        shift
+        ;;
+      --)
+        shift
+        _inputs+=("$@")
+        break
+        ;;
+      -*)
+        _die "unknown option: $1 (try --help)"
+        ;;
+      *)
+        _inputs+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  ((${#_inputs[@]} <= 1)) || _die "at most one input file is accepted"
+  _input="${_inputs[0]-}"
+
+  command -v gawk > /dev/null 2>&1 \
+    || _die 'gawk is required but was not found on PATH'
+  [[ -r ${AWK_PROGRAM} ]] \
+    || _die "cannot read the awk program at ${AWK_PROGRAM}"
+
+  if [[ -n ${_input} ]]; then
+    [[ -r ${_input} ]] || _die "cannot read input file: ${_input}"
+    _awk_input=("${_input}")
+  fi
+
+  # Writing straight to --output would truncate the destination before awk has
+  # produced anything, so a failed run would leave an empty document behind
+  # where a readable one used to be.
+  _rendered="$(gawk "${_awk_vars[@]}" -f "${AWK_PROGRAM}" -- "${_awk_input[@]}")"
+
+  if [[ -n ${_output} ]]; then
+    printf '%s\n' "${_rendered}" > "${_output}"
+  else
+    printf '%s\n' "${_rendered}"
+  fi
+}
+
+_main "$@"
