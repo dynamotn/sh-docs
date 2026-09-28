@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# @file tests/run_tests
+# @brief Run the sh-docs testcases.
+# @description Every file under `tests/testcases` is sourced in a temporary
+#   directory of its own, with `tests/lib.sh` already loaded. A testcase that
+#   returns non-zero has failed, and its working directory is kept so the
+#   document it produced can be inspected.
+# @usage
+#   ```bash
+#   tests/run_tests             # run every testcase
+#   tests/run_tests @option     # run the testcases whose name matches @option
+#   tests/run_tests -v          # also show the output of each testcase
+#   ```
+# @see
+#   - tests/lib.sh
+# @exitcode 0 Every testcase passed
+# @exitcode 1 A testcase failed, or nothing matched
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+readonly ROOT
+readonly TESTCASES_DIR="${ROOT}/tests/testcases"
+
+export SH_DOCS="${ROOT}/sh-docs"
+export SH_DOCS_AWK="${ROOT}/sh-docs.awk"
+export SH_DOCS_ROOT="${ROOT}"
+
+# The counters and the temporary directory outlive `_main`, because the EXIT
+# trap still has to read them once it has returned.
+declare -i passed=0 failed=0
+declare -a failures=()
+declare tmpdir=''
+
+# @description Remove the temporary directory, unless a testcase failed: the
+#   directories it kept are the only record of what was actually produced.
+# @noargs
+# @exitcode 0 Always, so a failed run reports its own status
+function _cleanup {
+  [[ -n ${tmpdir} && ${failed} -eq 0 ]] && rm -rf "${tmpdir}"
+  return 0
+}
+
+# @description Source one testcase in its own working directory.
+# @arg $1 string Path of the testcase file
+# @arg $2 string Working directory to run it in
+# @exitcode 0 The testcase passed
+# @exitcode 1 The testcase failed
+function _run_testcase {
+  local _testcase="$1" _workdir="$2"
+
+  (
+    cd "${_workdir}"
+    # shellcheck source=tests/lib.sh
+    . "${ROOT}/tests/lib.sh"
+    # shellcheck source=/dev/null
+    . "${_testcase}"
+  )
+}
+
+# @description Run the selected testcases and report the tally.
+# @arg $@ any Name fragments to select testcases, and `-v` to show their output
+# @stdout One line per testcase, then the tally
+# @exitcode 0 Every selected testcase passed
+# @exitcode 1 A testcase failed, or no testcase matched
+function _main {
+  local -a patterns=()
+  local _verbose=0 _arg
+
+  for _arg in "$@"; do
+    case "${_arg}" in
+      -v | --verbose) _verbose=1 ;;
+      *) patterns+=("${_arg}") ;;
+    esac
+  done
+
+  [[ -x ${SH_DOCS} ]] || {
+    printf 'sh-docs is not executable: %s\n' "${SH_DOCS}" >&2
+    exit 1
+  }
+  command -v gawk > /dev/null 2>&1 || {
+    printf 'gawk is required to run the tests\n' >&2
+    exit 1
+  }
+
+  # dyshellint disable=BSG011 `tmpdir` is deliberately global: the EXIT trap
+  # reads it after this function has returned.
+  tmpdir="$(mktemp -d)"
+  trap '_cleanup' EXIT
+
+  local _testcase _name _workdir _log _selected
+  # dyshellint disable=BSG011 the tally is deliberately global, for the same
+  # reason: `_cleanup` reads `failed` from the EXIT trap, and the summary below
+  # has to survive the subshell each testcase runs in.
+  for _testcase in "${TESTCASES_DIR}"/*.test.sh; do
+    _name="$(basename "${_testcase}" .test.sh)"
+
+    if ((${#patterns[@]})); then
+      _selected=0
+      for _arg in "${patterns[@]}"; do
+        [[ ${_name} == *"${_arg}"* ]] && _selected=1
+      done
+      ((_selected)) || continue
+    fi
+
+    _workdir="${tmpdir}/${_name}"
+    mkdir -p "${_workdir}"
+    _log="${_workdir}/.log"
+
+    if _run_testcase "${_testcase}" "${_workdir}" > "${_log}" 2>&1; then
+      passed+=1
+      printf '  ok   %s\n' "${_name}"
+      ((_verbose)) && cat "${_log}"
+    else
+      failed+=1
+      failures+=("${_name}")
+      printf '  FAIL %s\n' "${_name}"
+      sed 's/^/       /' "${_log}"
+    fi
+  done
+
+  printf '\n%d passed, %d failed\n' "${passed}" "${failed}"
+  if ((failed)); then
+    printf 'failed testcases: %s\n' "${failures[*]}"
+    printf 'working directories kept under %s\n' "${tmpdir}"
+    return 1
+  fi
+  if ((passed == 0)); then
+    printf 'no testcase matched\n' >&2
+    return 1
+  fi
+}
+
+_main "$@"
