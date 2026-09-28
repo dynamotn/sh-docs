@@ -1,0 +1,126 @@
+.TH SH-DOCS 1 "2026-09-28" "sh-docs" "User Commands"
+.SH NAME
+sh\-docs \- generate Markdown API documentation from shell doc comments
+.SH SYNOPSIS
+.B sh\-docs
+[\fIOPTION\fR]... [\fIFILE\fR]
+.SH DESCRIPTION
+.B sh\-docs
+reads a shell script and writes GitHub\-flavored Markdown describing it.
+It parses the annotations in the file header and in the comment block above
+each function definition, and renders a document with a navigation block, an
+overview, a highlight list of the documented functions, and a reference section
+with tables for arguments, options, environment variables, exit codes and
+streams.
+.PP
+\fIFILE\fR defaults to standard input, and the document is written to standard
+output unless
+.B \-\-output
+is given.
+.PP
+The annotation language is documented in the project README. In short, the file
+header takes
+.BR @file / @name ,
+.BR @brief ,
+.BR @description ,
+.BR @usage ,
+.BR @env ,
+.BR @see ,
+.BR @tip ,
+.B @deprecated
+and
+.BR @license ,
+and a function takes
+.BR @description ,
+.BR @section ,
+.BR @example ,
+.BR @arg ,
+.BR @option ,
+.BR @env ,
+.BR @set ,
+.BR @exitcode ,
+.BR @stdin ,
+.BR @stdout ,
+.BR @stderr ,
+.BR @noargs ,
+.BR @note ,
+.BR @tip ,
+.BR @see ,
+.B @deprecated
+and
+.BR @internal .
+.SH OPTIONS
+.TP
+.BR \-o ", " \-\-output " \fIFILE\fR"
+Write the document to \fIFILE\fR instead of standard output.
+.TP
+.BR \-\-src\-dir " \fIDIR\fR"
+Directory the documented sources live in. Default: \fBsrc\fR.
+.TP
+.BR \-\-doc\-dir " \fIDIR\fR"
+Directory the generated documents live in, used to resolve relative links.
+Default: \fBdocs\fR.
+.TP
+.BR \-\-root\-files " \fILIST\fR"
+Comma\-separated sources that sit at the repository root instead of inside
+\fB\-\-src\-dir\fR. Default: \fBinit.sh\fR.
+.TP
+.BR \-\-source\-path " \fIPATH\fR"
+Path of the documented source relative to the repository root. Overrides
+\fB\-\-src\-dir\fR and \fB\-\-root\-files\fR.
+.TP
+.BR \-\-link\-dirs " \fILIST\fR"
+Comma\-separated path prefixes that \fB@see\fR entries are resolved as paths
+rather than as anchors. Default: \fBdocs,example,src,scripts\fR.
+.TP
+.BR \-\-example\-dir " \fIDIR\fR"
+Scan \fIDIR\fR for example scripts that mention a documented function and list
+them under "Related examples". Scanning is off by default.
+.TP
+.BR \-\-example\-prefix " \fIDIR\fR"
+Prefix the scanned examples are linked under. Default: \fBexample\fR.
+.TP
+.BR \-h ", " \-\-help
+Show a usage summary and exit.
+.TP
+.BR \-V ", " \-\-version
+Show version information and exit.
+.SH ENVIRONMENT
+.TP
+.B SH_DOCS_AWK
+Path of the awk program. Defaults to
+.I sh\-docs.awk
+next to the
+.B sh\-docs
+script.
+.SH EXIT STATUS
+.TP
+.B 0
+The document was generated.
+.TP
+.B 1
+The invocation was invalid, the input could not be read, or awk failed.
+.SH EXAMPLES
+.PP
+Generate a document for one module:
+.PP
+.RS
+.nf
+sh\-docs < src/strings.sh > docs/strings.md
+.fi
+.RE
+.PP
+Document a module that lives outside the default layout:
+.PP
+.RS
+.nf
+sh\-docs \-\-source\-path lib/text/strings.sh lib/text/strings.sh \-o docs/strings.md
+.fi
+.RE
+.SH SEE ALSO
+.BR gawk (1),
+.BR shdoc (1)
+.SH AUTHOR
+Trần Đức Nam
+.SH LICENSE
+MIT
