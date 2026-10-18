@@ -532,13 +532,14 @@ it, and runs sh-docs over `files`, paths or globs separated by whitespace, with
 is missing or stale; `check: 'false'` writes the documents instead.
 
 ```yaml
-- uses: dynamotn/sh-docs@<tag>
+- uses: dynamotn/sh-docs@v2
   with:
     files: src/**/*.sh
     output-dir: docs
     strict: 'true'
 ```
 
+`@v2` follows the latest 2.x release; pin `@v2.0.0` or a commit to stay put.
 The inputs are `files`, `output-dir` (`docs`), `check` (`true`), `strict`
 (`false`), `index` (`false`), `format` (`markdown`) and `args`, further options
 that override the inputs, such as `--src-dir lib`. A path with a space in it
@@ -555,7 +556,7 @@ on `PATH`.
 ```yaml
 repos:
   - repo: https://github.com/dynamotn/sh-docs
-    rev: <a tag or commit>
+    rev: v2.0.0
     hooks:
       - id: sh-docs-check
         args: [--output-dir, docs, --src-dir, lib]
