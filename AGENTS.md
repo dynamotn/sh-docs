@@ -61,6 +61,10 @@ path rule belongs there, not inline.
 * Output must be deterministic. Anything that iterates an awk array for output
   sets `PROCINFO["sorted_in"]`; committed documents are compared byte for byte
   by the projects that use sh-docs.
+* A problem with the documentation itself is reported through `warn`, with the
+  line number in the source, and only under `strict`. A tag that is new to a
+  block must be added to `is_header_tag` or `is_function_tag`, or `--strict`
+  reports it as unknown.
 * `@section` is not sticky by design: each documented function carries its own.
   Do not change that without updating the README and the testcases that rely on
   it.

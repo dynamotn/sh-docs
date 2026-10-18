@@ -45,6 +45,9 @@ Options:
       --check               compare the document with the one in --output
                             instead of writing it; print a diff and exit 1
                             when it is missing or out of date
+      --strict              report unknown tags and public functions without
+                            @description on stderr, and exit 1 after writing
+                            the document
       --src-dir DIR         directory the documented sources live in
                             (default: src)
       --doc-dir DIR         directory the generated documents live in, used to
@@ -132,9 +135,10 @@ function _check_output {
 # @stdout The generated document, unless --output was given
 # @exitcode 0 The document was generated
 # @exitcode 1 The invocation was invalid, the input was unreadable, awk
-#   failed, or --check found the document missing or out of date
+#   failed, --check found the document missing or out of date, or --strict
+#   reported a problem
 function _main {
-  local _input='' _output='' _rendered _check=0 _value
+  local _input='' _output='' _rendered _check=0 _value _status=0
   local -a _awk_vars=() _inputs=() _awk_input=()
 
   # dyshellint disable=BSG051 sh-docs depends on gawk and bash alone, by
@@ -160,6 +164,10 @@ function _main {
         ;;
       --check)
         _check=1
+        shift
+        ;;
+      --strict)
+        _awk_vars+=(-v strict=1)
         shift
         ;;
       --src-dir | --doc-dir | --root-files | --source-path | --link-dirs | \
@@ -216,7 +224,13 @@ function _main {
   # Writing straight to --output would truncate the destination before awk has
   # produced anything, so a failed run would leave an empty document behind
   # where a readable one used to be.
-  _rendered="$(gawk "${_awk_vars[@]}" -f "${AWK_PROGRAM}" -- "${_awk_input[@]}")"
+  #
+  # awk exits 3 when --strict found something to report. The document is
+  # complete all the same, so it is still written, and the failure reported
+  # once it has been.
+  _rendered="$(gawk "${_awk_vars[@]}" -f "${AWK_PROGRAM}" -- "${_awk_input[@]}")" \
+    || _status=$?
+  ((_status == 0 || _status == 3)) || exit "${_status}"
 
   if ((_check)); then
     _check_output "${_rendered}" "${_output}"
@@ -225,6 +239,7 @@ function _main {
   else
     printf '%s\n' "${_rendered}"
   fi
+  ((_status == 0))
 }
 
 _main "$@"

@@ -18,6 +18,9 @@
 #   example_dir    filesystem directory scanned for related examples; scanning
 #                  is off when empty                            (default "")
 #   example_prefix prefix the scanned examples are linked under (default "example")
+#   strict         when 1, report unknown tags and public functions without
+#                  `@description` on stderr, and exit 3 once the document
+#                  is written                                   (default 0)
 
 BEGIN {
 	module_file = ""
@@ -33,6 +36,19 @@ BEGIN {
 	# opens on the next line.
 	FN_OPEN = "^[[:blank:]]*(function[[:blank:]]+)?([a-zA-Z0-9_\\-:\\.]+)[[:blank:]]*(\\([[:blank:]]*\\))?[[:blank:]]*(\\{|\\(([^)]|$))"
 	FN_DECL = "^[[:blank:]]*(function[[:blank:]]+)?([a-zA-Z0-9_\\-:\\.]+)[[:blank:]]*(\\([[:blank:]]*\\))?[[:blank:]]*$"
+	# The tags each kind of block understands. `--strict` reports any other.
+	split("file name brief description usage see tip env license deprecated namespace" \
+		" arg option exitcode stdin stdout stderr", parts, " ")
+	for (i in parts) {
+		is_header_tag[parts[i]] = 1
+	}
+	split("description example arg option env stdin stdout stderr exitcode set see" \
+		" tip deprecated note noargs section internal", parts, " ")
+	for (i in parts) {
+		is_function_tag[parts[i]] = 1
+	}
+	delete parts
+	warned = 0
 	init_layout()
 }
 
@@ -112,12 +128,13 @@ function path_prefix(text, slash)
 	}
 	if ($0 ~ /^[[:space:]]*#/) {
 		pending_lines[++pending_count] = $0
+		pending_nr[pending_count] = NR
 		next
 	}
 	# The body of a function is a `{ ... }` group or a `( ... )` subshell. A
 	# `()` right after the name is the empty parameter list, never a body.
 	if (match($0, FN_OPEN, m) && is_declaration(m)) {
-		parse_function_block(m[2])
+		parse_function_block(m[2], NR)
 		pending_count = 0
 		delete pending_lines
 		function_declaration = ""
@@ -125,10 +142,11 @@ function path_prefix(text, slash)
 	}
 	if (match($0, FN_DECL, m) && is_declaration(m)) {
 		function_declaration = m[2]
+		function_declaration_nr = NR
 		next
 	}
 	if ($0 ~ /^[[:blank:]]*[{(]/ && function_declaration != "") {
-		parse_function_block(function_declaration)
+		parse_function_block(function_declaration, function_declaration_nr)
 		pending_count = 0
 		delete pending_lines
 		function_declaration = ""
@@ -150,6 +168,40 @@ END {
 		parse_header()
 	}
 	render_module()
+	# The document is complete either way; the status tells the wrapper that
+	# `--strict` found something to report.
+	if (strict && warned) {
+		exit 3
+	}
+}
+
+# Report a problem with the documentation on stderr, when `--strict` asked for
+# it. The line number is the one in the documented source.
+function warn(nr, message, name)
+{
+	if (! strict) {
+		return
+	}
+	name = (FILENAME == "" || FILENAME == "-" ? "<stdin>" : FILENAME)
+	printf "sh-docs: %s:%d: %s\n", name, nr, message > "/dev/stderr"
+	warned = 1
+}
+
+# A private function needs no documentation: its name, or the last `::` part
+# of it, starts with `_`.
+function is_public(name)
+{
+	sub(/^.*::/, "", name)
+	return (name !~ /^_/)
+}
+
+# The tag a cleaned comment line opens, or "" when it opens none.
+function tag_of(line, m)
+{
+	if (match(line, /^@([[:alnum:]_-]+)([[:space:]]|$)/, m)) {
+		return m[1]
+	}
+	return ""
 }
 
 # Bash only reads a line as a function declaration when it carries the
@@ -196,6 +248,7 @@ function release_header_tail(i, last_blank, has_module_tag, line)
 	}
 	for (i = last_blank + 1; i <= header_count; i++) {
 		pending_lines[++pending_count] = header_lines[i]
+		pending_nr[pending_count] = i
 		delete header_lines[i]
 	}
 	header_count = last_blank
@@ -509,7 +562,7 @@ function parse_module_block(i, line, mode, rest)
 	}
 }
 
-function parse_function_block(name, i, line, mode, key, rest, parts, argline)
+function parse_function_block(name, nr, i, line, mode, key, rest, parts, argline)
 {
 	scan_pending_meta()
 	if (pending_internal) {
@@ -592,6 +645,9 @@ function parse_function_block(name, i, line, mode, key, rest, parts, argline)
 				fn_noargs[fn_count] = 1
 				mode = ""
 			} else {
+				if (! (key in is_function_tag)) {
+					warn(pending_nr[i], "unknown tag @" key)
+				}
 				mode = ""
 			}
 			continue
@@ -617,6 +673,9 @@ function parse_function_block(name, i, line, mode, key, rest, parts, argline)
 		} else if (mode != "") {
 			append_item("fn_" mode, fn_count, line)
 		}
+	}
+	if (! (("fn_desc" SUBSEP fn_count) in texts) && is_public(name)) {
+		warn(nr, name " has no @description")
 	}
 }
 
@@ -712,6 +771,24 @@ function parse_header(i, line, mode, rest)
 			mode = "deprecated"
 			continue
 		}
+		# The command line of a script that is run rather than sourced.
+		if (line ~ /^@(arg|option|exitcode|stdin|stdout|stderr)([[:space:]]+|$)/) {
+			mode = tag_of(line)
+			rest = trim(substr(line, length(mode) + 2))
+			if (rest != "") {
+				push_item("cli_" mode, 0, rest)
+			}
+			continue
+		}
+		# Any other tag ends the one before it. Otherwise its text would be
+		# read as a continuation line, and land inside, say, a `@see` link.
+		if (tag_of(line) != "") {
+			if (! (tag_of(line) in is_header_tag)) {
+				warn(i, "unknown tag @" tag_of(line))
+			}
+			mode = ""
+			continue
+		}
 		if (line ~ /^\*\*.*\((string|bool|number)\):/) {
 			push_item("module_globals", 0, line)
 			continue
@@ -733,8 +810,32 @@ function parse_header(i, line, mode, rest)
 			append_item("module_license", 0, line)
 		} else if (mode == "deprecated" && counts["module_deprecated", 0] > 0) {
 			append_item("module_deprecated", 0, line)
+		} else if (("cli_" mode, 0) in counts && counts["cli_" mode, 0] > 0) {
+			append_item("cli_" mode, 0, line)
 		}
 	}
+}
+
+function has_command_line()
+{
+	return (counts["cli_option", 0] + counts["cli_arg", 0] + counts["cli_stdin", 0] \
+		+ counts["cli_stdout", 0] + counts["cli_stderr", 0] + counts["cli_exitcode", 0] > 0)
+}
+
+function print_command_line()
+{
+	if (! has_command_line()) {
+		return
+	}
+	print_anchor("command-line")
+	print "## \360\237\226\245\357\270\217 Command line"
+	print ""
+	print_list("cli_option", 0, "Options", "option")
+	print_list("cli_arg", 0, "Arguments", "arg")
+	print_list("cli_stdin", 0, "Input on stdin", "bullet")
+	print_list("cli_stdout", 0, "Output on stdout", "bullet")
+	print_list("cli_stderr", 0, "Output on stderr", "bullet")
+	print_list("cli_exitcode", 0, "Exit codes", "exit")
 }
 
 function md_escape(text)
@@ -1069,6 +1170,9 @@ function print_quick_links(i, nav, section_nav, section_name, has_tips)
 	if (texts["module_usage", 0] != "") {
 		nav = append_nav_link(nav, "Usage", "Usage")
 	}
+	if (has_command_line()) {
+		nav = append_nav_link(nav, "Command line", "Command line")
+	}
 	if (counts["module_see", 0] > 0) {
 		nav = append_nav_link(nav, "See also", "See also")
 	}
@@ -1182,7 +1286,9 @@ function render_module(i, desc, intro, usage, rest, n, j, line, in_rest)
 		print "### 🚀 Highlights"
 		print ""
 		for (i = 1; i <= fn_count; i++) {
-			line = summary(texts["fn_desc", i])
+			# Reading `texts` directly would create an empty description, which
+			# the reference then prints as an extra blank line.
+			line = (("fn_desc" SUBSEP i) in texts ? summary(texts["fn_desc", i]) : "")
 			print "- " render_function_link(fn_name[i]) (line == "" ? "" : " \342\200\224 " line)
 		}
 		print ""
@@ -1201,6 +1307,7 @@ function render_module(i, desc, intro, usage, rest, n, j, line, in_rest)
 		print_multiline(dedent_doc(usage))
 		print ""
 	}
+	print_command_line()
 	if (counts["module_see", 0] > 0) {
 		print_anchor("see-also")
 		print "## 🔗 See also"

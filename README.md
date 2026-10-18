@@ -209,6 +209,29 @@ The license of the module, printed as the last section.
 # @license MIT
 ```
 
+#### `@option`, `@arg`, `@stdin`, `@stdout`, `@stderr`, `@exitcode`
+
+The command line of a script that is run rather than sourced. They take the
+same fields as the [function tags](#function-tags) of the same name, and are
+printed in a "Command line" section after the usage.
+
+```bash
+#!/usr/bin/env bash
+# @file greet
+# @brief Greet someone.
+# @usage greet [-l] NAME
+# @option -l | --loud Shout the greeting.
+# @arg $1 string The name to greet.
+# @stdout The greeting.
+# @exitcode 0 The greeting was written.
+# @exitcode 1 No name was given.
+```
+
+#### `@namespace`
+
+The namespace a sourced library declares its functions in. It is read for the
+benefit of linters and not printed.
+
 ### Function tags
 
 These are read from the comment block directly above a function definition. All
@@ -382,6 +405,19 @@ done
 exit "${stale:-0}"
 ```
 
+A misspelt tag is otherwise dropped without a word, and a function nobody
+described shows up in the reference with nothing under it. `--strict` reports
+both on stderr, each with its line, and exits 1 once the document is written:
+
+```console
+$ sh-docs --strict src/strings.sh -o docs/strings.md
+sh-docs: src/strings.sh:6: unknown tag @descripton
+sh-docs: src/strings.sh:7: strings::trim has no @description
+```
+
+A function is private, and needs no description, when its name or the last
+`::` part of it starts with `_`; an `@internal` one is not documented at all.
+
 ```
 Usage: sh-docs [OPTION]... [FILE]
 
@@ -390,6 +426,9 @@ Options:
       --check               compare the document with the one in --output
                             instead of writing it; print a diff and exit 1
                             when it is missing or out of date
+      --strict              report unknown tags and public functions without
+                            @description on stderr, and exit 1 after writing
+                            the document
       --src-dir DIR         directory the documented sources live in
                             (default: src)
       --doc-dir DIR         directory the generated documents live in, used to
