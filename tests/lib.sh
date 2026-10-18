@@ -70,7 +70,7 @@ function tests::assert_no_diff {
 # @exitcode 0 The code matches
 # @exitcode 1 The code differs
 function tests::assert_exitcode {
-  ((TESTS_EXITCODE == $1)) \
+  ((TESTS_EXITCODE == 10#$1)) \
     || tests::fail "expected exit code $1, got ${TESTS_EXITCODE}"
 }
 

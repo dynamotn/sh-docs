@@ -18,7 +18,14 @@
 
 set -euo pipefail
 
-ROOT="$(readlink -f "${BASH_SOURCE[0]}")"
+# Follow the symbolic links to this script by hand: `readlink -f` does it in
+# one call, but only in the GNU tools.
+ROOT="${BASH_SOURCE[0]}"
+while [[ -L ${ROOT} ]]; do
+  ROOT_LINK="$(readlink -- "${ROOT}")"
+  [[ ${ROOT_LINK} == /* ]] || ROOT_LINK="${ROOT%/*}/${ROOT_LINK}"
+  ROOT="${ROOT_LINK}"
+done
 ROOT="$(dirname "${ROOT}")"
 ROOT="$(cd "${ROOT}/.." && pwd)"
 readonly ROOT
@@ -51,6 +58,9 @@ function _cleanup {
 function _run_testcase {
   local _testcase="$1" _workdir="$2"
 
+  # A `.` that fails only prints an error. Checking first keeps the testcase
+  # out of a `||` list, where `set -e` would be off for all of it.
+  [[ -r ${ROOT}/tests/lib.sh && -r ${_testcase} ]] || return 1
   (
     cd "${_workdir}"
     # shellcheck source=tests/lib.sh
@@ -80,7 +90,7 @@ function _main {
     printf 'sh-docs is not executable: %s\n' "${SH_DOCS}" >&2
     exit 1
   }
-  command -v gawk > /dev/null 2>&1 || {
+  command -v gawk &> /dev/null || {
     printf 'gawk is required to run the tests\n' >&2
     exit 1
   }
@@ -95,6 +105,7 @@ function _main {
   # reason: `_cleanup` reads `failed` from the EXIT trap, and the summary below
   # has to survive the subshell each testcase runs in.
   for _testcase in "${TESTCASES_DIR}"/*.test.sh; do
+    [[ -e ${_testcase} ]] || continue
     _name="$(basename "${_testcase}" .test.sh)"
 
     if ((${#patterns[@]})); then
@@ -112,7 +123,7 @@ function _main {
     # Calling the testcase from the `if` itself would switch `set -e` off
     # inside it, so a failed assertion followed by a passing one would let the
     # testcase pass. Started as a job of its own, it keeps `set -e`.
-    _run_testcase "${_testcase}" "${_workdir}" > "${_log}" 2>&1 &
+    _run_testcase "${_testcase}" "${_workdir}" &> "${_log}" &
     if wait "$!"; then
       passed+=1
       printf '  ok   %s\n' "${_name}"
@@ -120,15 +131,15 @@ function _main {
     else
       failed+=1
       failures+=("${_name}")
-      printf '  FAIL %s\n' "${_name}"
-      sed 's/^/       /' "${_log}"
+      printf '  FAIL %s\n' "${_name}" >&2
+      sed 's/^/       /' "${_log}" >&2
     fi
   done
 
   printf '\n%d passed, %d failed\n' "${passed}" "${failed}"
   if ((failed)); then
-    printf 'failed testcases: %s\n' "${failures[*]}"
-    printf 'working directories kept under %s\n' "${tmpdir}"
+    printf 'failed testcases: %s\n' "${failures[*]}" >&2
+    printf 'working directories kept under %s\n' "${tmpdir}" >&2
     return 1
   fi
   if ((passed == 0)); then

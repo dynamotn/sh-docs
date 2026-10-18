@@ -66,7 +66,7 @@ function greeting::say {
 # @exitcode 0 The greeting was written.
 function greeting::reply {
   local name
-  read -r name
+  name="$(< /dev/stdin)"
   REPLY="$(greeting::say "${name}")"
   printf '%s\n' "${REPLY}"
 }
