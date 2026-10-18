@@ -643,22 +643,20 @@ function parse_header(i, line, mode, rest)
 			}
 			continue
 		}
-		if (line ~ /^@file[[:space:]]+/) {
-			module_file = trim(substr(line, 7))
-			mode = ""
-			continue
-		}
 		if (line ~ /^@brief[[:space:]]+/) {
 			module_brief = trim(substr(line, 8))
 			mode = ""
 			continue
 		}
 		if (line ~ /^@(name|file)[[:space:]]+/) {
-			module_file = trim(substr(line, index(line, " ") + 1))
+			# The value may follow a tab as well as a space.
+			module_file = line
+			sub(/^@(name|file)[[:space:]]+/, "", module_file)
+			module_file = trim(module_file)
 			mode = ""
 			continue
 		}
-		if (line ~ /^@description/) {
+		if (line ~ /^@description([[:space:]]+|$)/) {
 			rest = trim(substr(line, 13))
 			if (rest != "") {
 				append_text("module_desc", 0, rest)

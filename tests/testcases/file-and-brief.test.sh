@@ -23,3 +23,7 @@ Helpers for text manipulation.
 MD
 
 tests::assert
+
+# A tab separates a tag from its value as well as a space does.
+printf '#!/usr/bin/env bash\n# @name\tstrings.sh\n# @brief\tHelpers for text manipulation.\n' > input
+tests::assert

@@ -134,7 +134,7 @@ function _check_output {
 # @exitcode 1 The invocation was invalid, the input was unreadable, awk
 #   failed, or --check found the document missing or out of date
 function _main {
-  local _input='' _output='' _rendered _check=0
+  local _input='' _output='' _rendered _check=0 _value
   local -a _awk_vars=() _inputs=() _awk_input=()
 
   # dyshellint disable=BSG051 sh-docs depends on gawk and bash alone, by
@@ -165,12 +165,17 @@ function _main {
       --src-dir | --doc-dir | --root-files | --source-path | --link-dirs | \
         --example-dir | --example-prefix)
         _need_value "$1" $#
-        _awk_vars+=(-v "$(_awk_var "$1")=$2")
+        # awk reads escape sequences in a `-v` value, so `lib\new` would
+        # arrive as `lib`, a newline and `ew` unless every backslash is doubled.
+        _value="${2//\\/\\\\}"
+        _awk_vars+=(-v "$(_awk_var "$1")=${_value}")
         shift 2
         ;;
       --src-dir=* | --doc-dir=* | --root-files=* | --source-path=* | \
         --link-dirs=* | --example-dir=* | --example-prefix=*)
-        _awk_vars+=(-v "$(_awk_var "${1%%=*}")=${1#*=}")
+        _value="${1#*=}"
+        _value="${_value//\\/\\\\}"
+        _awk_vars+=(-v "$(_awk_var "${1%%=*}")=${_value}")
         shift
         ;;
       --)

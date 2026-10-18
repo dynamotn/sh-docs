@@ -27,3 +27,22 @@ tests::put expected << 'MD'
 MD
 
 tests::assert --src-dir lib --root-files bootstrap.sh
+
+# A backslash in an option value is taken literally, not as an awk escape.
+tests::put input << 'SH'
+# @file strings.sh
+SH
+
+tests::put expected << 'MD'
+# strings.sh
+
+> 🧭 Source: [lib\new/strings.sh](../lib\new/strings.sh)
+>
+> Jump to: [Overview](#overview)
+
+<a id="overview"></a>
+## ✨ Overview
+MD
+
+tests::assert --src-dir 'lib\new'
+tests::assert '--src-dir=lib\new'
