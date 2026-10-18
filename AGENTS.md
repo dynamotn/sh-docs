@@ -9,6 +9,8 @@ public annotation language.
   variables, reads a file or stdin, and writes stdout or `--output`.
 * `examples/readme-example.sh` / `.md` — the worked example, regenerated with
   `make examples`.
+* `contrib/github-action.sh` — the script behind `action.yml`: it turns the
+  inputs of the action into a sh-docs command line.
 * `tests/` — a dependency-free bash harness.
 
 ## Architecture

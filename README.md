@@ -524,6 +524,26 @@ one: dated by the day it was generated, it would differ on every run, and
 `--check` would always report it stale. The last commit date of the source, as
 above, is a date that only moves when the source does.
 
+### GitHub Action
+
+The repository is also a GitHub Action. It installs gawk when the runner lacks
+it, and runs sh-docs over `files`, paths or globs separated by whitespace, with
+`**` matching across directories. By default it checks, failing when a document
+is missing or stale; `check: 'false'` writes the documents instead.
+
+```yaml
+- uses: dynamotn/sh-docs@<tag>
+  with:
+    files: src/**/*.sh
+    output-dir: docs
+    strict: 'true'
+```
+
+The inputs are `files`, `output-dir` (`docs`), `check` (`true`), `strict`
+(`false`), `index` (`false`), `format` (`markdown`) and `args`, further options
+that override the inputs, such as `--src-dir lib`. A path with a space in it
+cannot be given, since both `files` and `args` are split on whitespace.
+
 ### prek and pre-commit
 
 The repository ships two hooks, for [prek](https://github.com/j178/prek) and

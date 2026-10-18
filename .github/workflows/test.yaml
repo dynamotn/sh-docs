@@ -39,3 +39,14 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y gawk
       - name: Regenerate and compare
         run: make check-examples
+
+  action:
+    name: The action checks its own example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          files: examples/*.sh
+          output-dir: examples
+          strict: 'true'

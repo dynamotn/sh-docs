@@ -1,0 +1,63 @@
+name: sh-docs
+description: Generate or check Markdown and man page documentation from shell doc comments.
+author: dynamotn
+branding:
+  icon: book-open
+  color: blue
+
+inputs:
+  files:
+    description: >-
+      The sources to document, as paths or globs separated by whitespace;
+      `**` matches across directories.
+    required: true
+  output-dir:
+    description: The directory the documents are written to, or compared with.
+    default: docs
+  check:
+    description: >-
+      `true` to fail when a document is missing or stale instead of writing
+      it; `false` to write the documents.
+    default: 'true'
+  strict:
+    description: '`true` to fail on unknown tags and undocumented functions or arguments.'
+    default: 'false'
+  index:
+    description: '`true` to write an index.md that lists the documents.'
+    default: 'false'
+  format:
+    description: '`markdown`, or `man` for roff man pages.'
+    default: markdown
+  args:
+    description: >-
+      Further sh-docs options, separated by whitespace, such as
+      `--src-dir lib`; they override the inputs above.
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Install gawk
+      shell: bash
+      run: |
+        if ! command -v gawk > /dev/null; then
+          if command -v apt-get > /dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq gawk
+          elif command -v brew > /dev/null; then
+            brew install gawk
+          else
+            echo '::error title=sh-docs::gawk is required and could not be installed'
+            exit 2
+          fi
+        fi
+    - name: Run sh-docs
+      shell: bash
+      env:
+        SH_DOCS_FILES: ${{ inputs.files }}
+        SH_DOCS_OUTPUT_DIR: ${{ inputs.output-dir }}
+        SH_DOCS_CHECK: ${{ inputs.check }}
+        SH_DOCS_STRICT: ${{ inputs.strict }}
+        SH_DOCS_INDEX: ${{ inputs.index }}
+        SH_DOCS_FORMAT: ${{ inputs.format }}
+        SH_DOCS_ARGS: ${{ inputs.args }}
+      run: '"${GITHUB_ACTION_PATH}/contrib/github-action.sh"'

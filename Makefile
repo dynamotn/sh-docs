@@ -1,10 +1,10 @@
 SHELL = /bin/bash
 
-SHELL_FILES = sh-docs tests/run_tests tests/lib.sh $(wildcard tests/testcases/*.test.sh) examples/readme-example.sh
+SHELL_FILES = sh-docs contrib/github-action.sh tests/run_tests tests/lib.sh $(wildcard tests/testcases/*.test.sh) examples/readme-example.sh
 
 # The sources whose doc comments are held to --strict. The testcases are left
 # out: their heredocs hold fixtures, misspelt tags among them on purpose.
-STRICT_FILES = sh-docs tests/run_tests tests/lib.sh examples/readme-example.sh
+STRICT_FILES = sh-docs contrib/github-action.sh tests/run_tests tests/lib.sh examples/readme-example.sh
 
 # The formatting the style guide implies, the same set dyshellint checks with.
 SHFMT_FLAGS = --language-dialect bash --indent 2 --case-indent --binary-next-line --space-redirects
