@@ -1,0 +1,29 @@
+# Hooks for prek and pre-commit while working on sh-docs itself. They run the
+# same targets as CI, from this checkout, so they test the code being changed.
+repos:
+  - repo: local
+    hooks:
+      - id: make-test
+        name: make test
+        entry: make test
+        language: system
+        pass_filenames: false
+        files: ^(sh-docs|sh-docs\.awk|tests/.*)$
+      - id: make-strict
+        name: make strict
+        entry: make strict
+        language: system
+        pass_filenames: false
+        files: ^(sh-docs|sh-docs\.awk|tests/run_tests|tests/lib\.sh|examples/.*\.sh)$
+      - id: make-check-examples
+        name: make check-examples
+        entry: make check-examples
+        language: system
+        pass_filenames: false
+        files: ^(sh-docs|sh-docs\.awk|examples/.*)$
+      - id: make-lint
+        name: make lint
+        entry: make lint
+        language: system
+        pass_filenames: false
+        types: [shell]

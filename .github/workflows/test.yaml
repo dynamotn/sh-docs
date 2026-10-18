@@ -11,6 +11,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y gawk
       - name: Run tests
         run: make test
+      - name: Check doc comments
+        run: make strict
 
   lint:
     name: Lint

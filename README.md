@@ -611,8 +611,12 @@ generated document is not the same:
 make test       # run the testcases
 make examples   # regenerate examples/*.md
 make lint       # dyshellint the shell sources, and parse-check the awk program
+make strict     # run sh-docs --strict over its own sources
 make fmt        # shfmt the shell sources
 ```
+
+`.pre-commit-config.yaml` runs the same targets from prek or pre-commit
+(`prek install`), each only when a file it covers is staged.
 
 The shell sources follow the Dynamo shell style guide and are checked with
 [dyshellint](https://gitlab.com/dynamo-tools/dyshellint), which drives

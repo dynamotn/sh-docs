@@ -2,6 +2,10 @@ SHELL = /bin/bash
 
 SHELL_FILES = sh-docs tests/run_tests tests/lib.sh $(wildcard tests/testcases/*.test.sh) examples/readme-example.sh
 
+# The sources whose doc comments are held to --strict. The testcases are left
+# out: their heredocs hold fixtures, misspelt tags among them on purpose.
+STRICT_FILES = sh-docs tests/run_tests tests/lib.sh examples/readme-example.sh
+
 # The formatting the style guide implies, the same set dyshellint checks with.
 SHFMT_FLAGS = --language-dialect bash --indent 2 --case-indent --binary-next-line --space-redirects
 
@@ -13,7 +17,7 @@ DATADIR ?= $(PREFIX)/share/sh-docs
 MANDIR ?= $(PREFIX)/share/man/man1
 MANPAGE = contrib/sh-docs.1
 
-.PHONY: all test examples check-examples lint fmt install uninstall
+.PHONY: all test examples check-examples strict lint fmt install uninstall
 
 all: test
 
@@ -27,6 +31,12 @@ examples:
 # generated from. The testcase of the same name checks it in the suite too.
 check-examples:
 	$(MAKE) -C examples/ check
+
+# sh-docs documents itself, so its own comments get the check it offers others.
+strict:
+	@status=0; for src in $(STRICT_FILES); do \
+		./sh-docs --strict "$$src" > /dev/null || status=1; \
+	done; exit $$status
 
 # dyshellint drives ShellCheck and shfmt itself, so it is the whole shell pass.
 lint:
