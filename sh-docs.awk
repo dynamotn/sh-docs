@@ -18,9 +18,16 @@
 #   example_dir    filesystem directory scanned for related examples; scanning
 #                  is off when empty                            (default "")
 #   example_prefix prefix the scanned examples are linked under (default "example")
-#   strict         when 1, report unknown tags and public functions without
-#                  `@description` on stderr, and exit 3 once the document
-#                  is written                                   (default 0)
+#   strict         when 1, report unknown tags, public functions without
+#                  `@description` and positional arguments without `@arg`
+#                  on stderr, and exit 3 once the document is written
+#                                                               (default 0)
+#   line_links     when 1, link each function to its line in the source
+#                                                               (default 0)
+#   no_emoji       when 1, print headings and labels without emoji (default 0)
+#   emit           "summary" prints the module name and brief, separated by a
+#                  tab, instead of the document; the wrapper builds the
+#                  index from it                                (default "")
 
 BEGIN {
 	module_file = ""
@@ -38,17 +45,18 @@ BEGIN {
 	FN_DECL = "^[[:blank:]]*(function[[:blank:]]+)?([a-zA-Z0-9_\\-:\\.]+)[[:blank:]]*(\\([[:blank:]]*\\))?[[:blank:]]*$"
 	# The tags each kind of block understands. `--strict` reports any other.
 	split("file name brief description usage see tip env license deprecated namespace" \
-		" arg option exitcode stdin stdout stderr", parts, " ")
+		" since arg option exitcode stdin stdout stderr", parts, " ")
 	for (i in parts) {
 		is_header_tag[parts[i]] = 1
 	}
 	split("description example arg option env stdin stdout stderr exitcode set see" \
-		" tip deprecated note noargs section internal", parts, " ")
+		" tip deprecated note noargs section internal warning since", parts, " ")
 	for (i in parts) {
 		is_function_tag[parts[i]] = 1
 	}
 	delete parts
 	warned = 0
+	body_fn = 0
 	init_layout()
 }
 
@@ -126,6 +134,9 @@ function path_prefix(text, slash)
 		}
 		parse_header()
 	}
+	if (body_fn) {
+		scan_body_line($0)
+	}
 	if ($0 ~ /^[[:space:]]*#/) {
 		pending_lines[++pending_count] = $0
 		pending_nr[pending_count] = NR
@@ -135,6 +146,7 @@ function path_prefix(text, slash)
 	# `()` right after the name is the empty parameter list, never a body.
 	if (match($0, FN_OPEN, m) && is_declaration(m)) {
 		parse_function_block(m[2], NR)
+		start_body($0, substr($0, RSTART + RLENGTH))
 		pending_count = 0
 		delete pending_lines
 		function_declaration = ""
@@ -143,10 +155,12 @@ function path_prefix(text, slash)
 	if (match($0, FN_DECL, m) && is_declaration(m)) {
 		function_declaration = m[2]
 		function_declaration_nr = NR
+		function_declaration_line = $0
 		next
 	}
 	if ($0 ~ /^[[:blank:]]*[{(]/ && function_declaration != "") {
 		parse_function_block(function_declaration, function_declaration_nr)
+		start_body(function_declaration_line, substr($0, index($0, substr(trim($0), 1, 1)) + 1))
 		pending_count = 0
 		delete pending_lines
 		function_declaration = ""
@@ -166,6 +180,13 @@ function path_prefix(text, slash)
 END {
 	if (! header_done) {
 		parse_header()
+	}
+	if (body_fn) {
+		close_body()
+	}
+	if (emit == "summary") {
+		print module_file "\t" module_brief
+		exit
 	}
 	render_module()
 	# The document is complete either way; the status tells the wrapper that
@@ -193,6 +214,84 @@ function is_public(name)
 {
 	sub(/^.*::/, "", name)
 	return (name !~ /^_/)
+}
+
+# The body of the function just parsed starts. `declaration` is the line that
+# named the function, which sets the indentation its closing `}` or `)` sits
+# at; `rest` is whatever follows the opener on the same line.
+function start_body(declaration, rest)
+{
+	if (! body_fn) {
+		return
+	}
+	match(declaration, /^[[:blank:]]*/)
+	body_indent = substr(declaration, 1, RLENGTH)
+	scan_positional(rest, NR)
+	if (trim(rest) ~ /[})]$/) {
+		close_body()
+	}
+}
+
+function scan_body_line(line)
+{
+	if (substr(line, 1, length(body_indent) + 1) ~ /[})]$/ \
+		&& substr(line, 1, length(body_indent)) == body_indent) {
+		close_body()
+		return
+	}
+	if (line ~ /^[[:space:]]*#/) {
+		return
+	}
+	scan_positional(line, NR)
+}
+
+# Record the positional parameters `text` reads. Escaped dollars and
+# single-quoted text are not expansions, and a trailing comment is not code.
+function scan_positional(text, nr, n)
+{
+	gsub(/\\\$/, "", text)
+	gsub(/'[^']*'/, "", text)
+	sub(/[[:space:]]#.*$/, "", text)
+	while (match(text, /\$\{?[1-9]/)) {
+		n = substr(text, RSTART + RLENGTH - 1, 1)
+		if (! (n in body_uses)) {
+			body_uses[n] = nr
+		}
+		text = substr(text, RSTART + RLENGTH)
+	}
+}
+
+# The body has ended: report the positions it read that no `@arg` covers.
+function close_body(i, token, covered, n, idx, name)
+{
+	idx = body_fn
+	body_fn = 0
+	name = fn_name[idx]
+	if (is_public(name)) {
+		for (i = 1; i <= counts["fn_arg", idx]; i++) {
+			token = items["fn_arg", idx, i]
+			sub(/[[:space:]].*$/, "", token)
+			if (token == "$@" || token == "$*") {
+				delete body_uses
+				return
+			}
+			covered[token] = 1
+		}
+		PROCINFO["sorted_in"] = "@val_num_asc"
+		for (n in body_uses) {
+			if (! (("$" n) in covered)) {
+				warn(body_uses[n], name " uses $" n " without @arg $" n)
+			}
+		}
+		delete PROCINFO["sorted_in"]
+	}
+	delete body_uses
+}
+
+# An emoji and the space after it, or nothing under `--no-emoji`.
+function ic(emoji)
+{
+	return (no_emoji ? "" : emoji " ")
 }
 
 # The tag a cleaned comment line opens, or "" when it opens none.
@@ -435,17 +534,27 @@ function render_link(text, url, raw)
 	return "[" text "](#" url ")"
 }
 
-function render_source_link(path)
+# The path of the documented source relative to the repository root, or ""
+# when there is none: a document generated from stdin without `@file`.
+function source_file(path)
 {
 	# Modules live in `src_dir`; the files named by `root_files` sit at the
 	# repository root instead.
 	if (source_path != "") {
 		path = source_path
+	} else if (module_file == "") {
+		path = ""
 	} else if (module_file in is_root_file || src_dir == "") {
 		path = module_file
 	} else {
 		path = src_dir "/" module_file
 	}
+	return path
+}
+
+function render_source_link(path)
+{
+	path = source_file()
 	return "[" path "](../" path ")"
 }
 
@@ -564,6 +673,9 @@ function parse_module_block(i, line, mode, rest)
 
 function parse_function_block(name, nr, i, line, mode, key, rest, parts, argline)
 {
+	if (body_fn) {
+		close_body()
+	}
 	scan_pending_meta()
 	if (pending_internal) {
 		pending_section = ""
@@ -571,6 +683,7 @@ function parse_function_block(name, nr, i, line, mode, key, rest, parts, argline
 	}
 	fn_count++
 	fn_name[fn_count] = name
+	fn_nr[fn_count] = nr
 	public_names[fn_count] = name
 	fn_section[fn_count] = pending_section
 	pending_section = ""
@@ -644,6 +757,12 @@ function parse_function_block(name, nr, i, line, mode, key, rest, parts, argline
 			} else if (key == "noargs") {
 				fn_noargs[fn_count] = 1
 				mode = ""
+			} else if (key == "warning") {
+				push_item("fn_warning", fn_count, rest)
+				mode = "warning"
+			} else if (key == "since") {
+				fn_since[fn_count] = rest
+				mode = ""
 			} else {
 				if (! (key in is_function_tag)) {
 					warn(pending_nr[i], "unknown tag @" key)
@@ -677,6 +796,7 @@ function parse_function_block(name, nr, i, line, mode, key, rest, parts, argline
 	if (! (("fn_desc" SUBSEP fn_count) in texts) && is_public(name)) {
 		warn(nr, name " has no @description")
 	}
+	body_fn = fn_count
 }
 
 function parse_header(i, line, mode, rest)
@@ -704,6 +824,11 @@ function parse_header(i, line, mode, rest)
 		}
 		if (line ~ /^@brief[[:space:]]+/) {
 			module_brief = trim(substr(line, 8))
+			mode = ""
+			continue
+		}
+		if (line ~ /^@since[[:space:]]+/) {
+			module_since = trim(substr(line, 8))
 			mode = ""
 			continue
 		}
@@ -828,7 +953,7 @@ function print_command_line()
 		return
 	}
 	print_anchor("command-line")
-	print "## \360\237\226\245\357\270\217 Command line"
+	print "## " ic("\360\237\226\245\357\270\217") "Command line"
 	print ""
 	print_list("cli_option", 0, "Options", "option")
 	print_list("cli_arg", 0, "Arguments", "arg")
@@ -856,19 +981,77 @@ function print_table_row(c1, c2, c3, has_three)
 	}
 }
 
-function print_arg_table(kind, idx, i, key, text, m)
+# Split `name type [default: value] description` into `p`. A type ending in
+# `?`, or a default, makes the parameter optional.
+function parse_param(text, p, m)
 {
-	print "| Name | Type | Description |"
-	print "| --- | --- | --- |"
+	delete p
+	if (! match(text, /^([^[:space:]]+)[[:space:]]+([^[:space:]]+)([[:space:]]+\[default:[[:space:]]*([^]]*)\])?[[:space:]]+(.*)$/, m)) {
+		return 0
+	}
+	p["name"] = m[1]
+	p["type"] = m[2]
+	p["optional"] = (p["type"] ~ /\?$/ || m[3] != "")
+	sub(/\?$/, "", p["type"])
+	p["has_default"] = (m[3] != "")
+	p["default"] = trim(m[4])
+	p["desc"] = m[5]
+	return 1
+}
+
+# The table of `@arg` or `@env` entries. The Required and Default columns are
+# only added when a row uses them, so a table without optional entries reads
+# as it always did.
+function print_param_table(kind, idx, label, is_arg, i, text, p, extra, name, ok)
+{
+	extra = 0
 	for (i = 1; i <= counts[kind, idx]; i++) {
-		key = kind SUBSEP idx SUBSEP i
-		text = items[key]
-		if (match(text, /^(\$[^[:space:]]+)[[:space:]]+([^[:space:]]+)[[:space:]]+(.*)$/, m)) {
-			print_table_row("`" m[1] "`", m[2], m[3], 1)
-		} else {
-			print_table_row(text, "", "", 1)
+		if (parse_param(items[kind, idx, i], p) && p["optional"] \
+			&& (! is_arg || p["name"] ~ /^\$/)) {
+			extra = 1
 		}
 	}
+	if (extra) {
+		print "| " label " | Type | Required | Default | Description |"
+		print "| --- | --- | --- | --- | --- |"
+	} else {
+		print "| " label " | Type | Description |"
+		print "| --- | --- | --- |"
+	}
+	for (i = 1; i <= counts[kind, idx]; i++) {
+		text = items[kind, idx, i]
+		ok = parse_param(text, p) && (! is_arg || p["name"] ~ /^\$/)
+		if (! ok) {
+			print_cells(text, "", extra ? "" : "\001", extra ? "" : "\001", "")
+			continue
+		}
+		name = (is_arg ? "`" p["name"] "`" : "**`" p["name"] "`**")
+		if (extra) {
+			print_cells(name, p["type"], (p["optional"] ? "no" : "yes"), \
+				(p["has_default"] ? "`" p["default"] "`" : ""), p["desc"])
+		} else {
+			print_cells(name, p["type"], "\001", "\001", p["desc"])
+		}
+	}
+}
+
+# Print a table row; a cell holding "\001" is left out, so the same call
+# serves the three- and the five-column table.
+function print_cells(c1, c2, c3, c4, c5, row)
+{
+	row = "| " md_escape(c1) " | " md_escape(c2)
+	if (c3 != "\001") {
+		row = row " | " md_escape(c3)
+	}
+	if (c4 != "\001") {
+		row = row " | " md_escape(c4)
+	}
+	print row " | " md_escape(c5) " |"
+}
+
+function print_arg_table(kind, idx)
+{
+	print_param_table(kind, idx, "Name", 1)
 }
 
 function print_option_table(kind, idx, i, key, text, m, term, desc)
@@ -891,23 +1074,14 @@ function print_option_table(kind, idx, i, key, text, m, term, desc)
 	}
 }
 
-function print_env_table(kind, idx, i, key, text, m)
+function print_env_table(kind, idx)
 {
-	print "| Variable | Type | Description |"
-	print "| --- | --- | --- |"
-	for (i = 1; i <= counts[kind, idx]; i++) {
-		key = kind SUBSEP idx SUBSEP i
-		text = items[key]
-		if (match(text, /^([^[:space:]]+)[[:space:]]+([^[:space:]]+)[[:space:]]+(.*)$/, m)) {
-			print_table_row("**`" m[1] "`**", m[2], m[3], 1)
-		} else {
-			print_table_row(text, "", "", 1)
-		}
-	}
+	print_param_table(kind, idx, "Variable", 0)
 }
 
 function decorate_block_title(title)
 {
+	if (no_emoji) return title
 	if (title == "Arguments") return "🧾 Arguments"
 	if (title == "Options") return "🎛️ Options"
 	if (title == "Environment variables") return "🌍 Environment variables"
@@ -950,19 +1124,27 @@ function print_function(idx, fn_desc_key, fn_heading_level, starts_new_section, 
 	}
 	if (fn_section[idx] != "" && fn_section[idx] != last_printed_section) {
 		print_anchor(github_anchor(fn_section[idx]))
-		print "### 🧩 " fn_section[idx]
+		print "### " ic("🧩") fn_section[idx]
 		print ""
 		last_printed_section = fn_section[idx]
 	}
 	fn_heading_level = (fn_section[idx] != "" ? "####" : "###")
 	print fn_heading_level " `" fn_name[idx] "`"
 	print ""
+	if (line_links && source_file() != "") {
+		print "_Source: [" source_file() ":" fn_nr[idx] "](../" source_file() "#L" fn_nr[idx] ")_"
+		print ""
+	}
 	if (counts["fn_deprecated", idx] > 0) {
-		print "> ⚠️ **Deprecated**"
+		print "> " ic("⚠️") "**Deprecated**"
 		print ">"
 		for (i = 1; i <= counts["fn_deprecated", idx]; i++) {
 			print "> " items["fn_deprecated", idx, i]
 		}
+		print ""
+	}
+	if (fn_since[idx] != "") {
+		print "_Since: " fn_since[idx] "_"
 		print ""
 	}
 	fn_desc_key = "fn_desc" SUBSEP idx
@@ -970,11 +1152,19 @@ function print_function(idx, fn_desc_key, fn_heading_level, starts_new_section, 
 		print_multiline(dedent_doc(texts[fn_desc_key] ""))
 		print ""
 	}
+	if (counts["fn_warning", idx] > 0) {
+		print "> " ic("⚠️") "**Warning**"
+		print ">"
+		for (i = 1; i <= counts["fn_warning", idx]; i++) {
+			print "> " (counts["fn_warning", idx] > 1 ? "- " : "") items["fn_warning", idx, i]
+		}
+		print ""
+	}
 	if (counts["fn_example", idx] > 0) {
 		if (counts["fn_example", idx] == 1) {
-			print "**🧪 Example**"
+			print "**" ic("🧪") "Example**"
 		} else {
-			print "**🧪 Examples**"
+			print "**" ic("🧪") "Examples**"
 		}
 		print ""
 		for (i = 1; i <= counts["fn_example", idx]; i++) {
@@ -1080,7 +1270,7 @@ function print_related_examples(cmd, path, found, content, line, i, j, skip, rel
 	if (! found) {
 		return
 	}
-	print "## 🧪 Related examples"
+	print "## " ic("🧪") "Related examples"
 	print ""
 	# Unordered array traversal would make the generated document depend on
 	# awk's internal hashing, which is exactly the kind of spurious diff a
@@ -1130,7 +1320,7 @@ function print_tips_section(i, j, has_tips)
 		return
 	}
 	print_anchor("tips")
-	print "## 💡 Tips"
+	print "## " ic("💡") "Tips"
 	print ""
 	if (counts["module_tip", 0] > 0) {
 		for (j = 1; j <= counts["module_tip", 0]; j++) {
@@ -1186,7 +1376,7 @@ function print_quick_links(i, nav, section_nav, section_name, has_tips)
 		# A document generated from stdin without `@file` has no source path
 		# to point at, and a link to `src/` alone points at the wrong thing.
 		if (module_file != "" || source_path != "") {
-			print "> 🧭 Source: " render_source_link()
+			print "> " ic("🧭") "Source: " render_source_link()
 			print ">"
 		}
 		print "> Jump to: " nav
@@ -1229,9 +1419,13 @@ function render_module(i, desc, intro, usage, rest, n, j, line, in_rest)
 		print module_brief
 		print ""
 	}
+	if (module_since != "") {
+		print "_Since: " module_since "_"
+		print ""
+	}
 	print_quick_links()
 	if (counts["module_deprecated", 0] > 0) {
-		print "> ⚠️ **Deprecated module**"
+		print "> " ic("⚠️") "**Deprecated module**"
 		print ">"
 		for (i = 1; i <= counts["module_deprecated", 0]; i++) {
 			print "> " items["module_deprecated", 0, i]
@@ -1239,7 +1433,7 @@ function render_module(i, desc, intro, usage, rest, n, j, line, in_rest)
 		print ""
 	}
 	print_anchor("overview")
-	print "## ✨ Overview"
+	print "## " ic("✨") "Overview"
 	print ""
 	desc = texts["module_desc", 0]
 	if (desc != "") {
@@ -1269,7 +1463,7 @@ function render_module(i, desc, intro, usage, rest, n, j, line, in_rest)
 		}
 	}
 	if (counts["module_globals", 0] > 0) {
-		print "### 🧰 Module variables"
+		print "### " ic("🧰") "Module variables"
 		print ""
 		for (i = 1; i <= counts["module_globals", 0]; i++) {
 			print "- " items["module_globals", 0, i]
@@ -1277,13 +1471,13 @@ function render_module(i, desc, intro, usage, rest, n, j, line, in_rest)
 		print ""
 	}
 	if (counts["module_env", 0] > 0) {
-		print "### 🌍 Environment"
+		print "### " ic("🌍") "Environment"
 		print ""
 		print_env_table("module_env", 0)
 		print ""
 	}
 	if (fn_count > 0) {
-		print "### 🚀 Highlights"
+		print "### " ic("🚀") "Highlights"
 		print ""
 		for (i = 1; i <= fn_count; i++) {
 			# Reading `texts` directly would create an empty description, which
@@ -1302,7 +1496,7 @@ function render_module(i, desc, intro, usage, rest, n, j, line, in_rest)
 	sub(/\n+$/, "", usage)
 	if (usage != "") {
 		print_anchor("usage")
-		print "## 🚀 Usage"
+		print "## " ic("🚀") "Usage"
 		print ""
 		print_multiline(dedent_doc(usage))
 		print ""
@@ -1310,7 +1504,7 @@ function render_module(i, desc, intro, usage, rest, n, j, line, in_rest)
 	print_command_line()
 	if (counts["module_see", 0] > 0) {
 		print_anchor("see-also")
-		print "## 🔗 See also"
+		print "## " ic("🔗") "See also"
 		print ""
 		for (i = 1; i <= counts["module_see", 0]; i++) {
 			line = items["module_see", 0, i]
@@ -1321,7 +1515,7 @@ function render_module(i, desc, intro, usage, rest, n, j, line, in_rest)
 	print_tips_section()
 	if (fn_count > 0) {
 		print_anchor("reference")
-		print "## 📚 Reference"
+		print "## " ic("📚") "Reference"
 		print ""
 		for (i = 1; i <= fn_count; i++) {
 			print_function(i)
@@ -1333,7 +1527,7 @@ function render_module(i, desc, intro, usage, rest, n, j, line, in_rest)
 	# Every section above ends with a blank line of its own, so these two must
 	# not add a second one.
 	if (counts["module_license", 0] > 0) {
-		print "## 📄 License"
+		print "## " ic("📄") "License"
 		print ""
 		for (i = 1; i <= counts["module_license", 0]; i++) {
 			print "- " items["module_license", 0, i]

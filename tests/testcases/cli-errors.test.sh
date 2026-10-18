@@ -23,4 +23,4 @@ tests::put two.sh << 'SH'
 SH
 tests::run one.sh two.sh
 tests::assert_exitcode 1
-tests::assert_stderr_contains 'at most one input file is accepted'
+tests::assert_stderr_contains 'several input files need --output-dir'

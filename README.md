@@ -166,10 +166,11 @@ commands in a code fence if you want one.
 #### `@env`
 
 An environment variable the module reads. Three fields: name, type,
-description.
+description. Like `@arg`, it can be [optional](#optional-arguments-and-defaults).
 
 ```bash
 # @env STRINGS_LOCALE string Locale used when folding case.
+# @env STRINGS_FILL string [default: space] Character used for padding.
 ```
 
 #### `@see`
@@ -227,6 +228,14 @@ printed in a "Command line" section after the usage.
 # @exitcode 1 No name was given.
 ```
 
+#### `@since`
+
+The version the module first appeared in, printed under the brief.
+
+```bash
+# @since 1.0.0
+```
+
 #### `@namespace`
 
 The namespace a sourced library declares its functions in. It is read for the
@@ -281,11 +290,24 @@ one example; they are numbered in the document.
 #### `@arg`
 
 A positional argument. Three fields: name, type, description. Rendered as a
-table row.
+table row. `$@` documents every argument at once.
 
 ```bash
 # @arg $1 string The string to repeat.
 # @arg $2 number How many times to repeat it.
+```
+
+##### Optional arguments and defaults
+
+A type ending in `?` marks an `@arg` or `@env` entry optional, and
+`[default: value]` after the type gives its default, which makes it optional
+too. The table gains "Required" and "Default" columns only when one of its
+rows uses them, so a table without optional entries looks as it always did.
+
+```bash
+# @arg $1 string The string to repeat.
+# @arg $2 number [default: 1] How many times to repeat it.
+# @arg $3 string? Separator put between the copies.
 ```
 
 #### `@option`
@@ -349,6 +371,20 @@ the function.
 
 Marks the function as deprecated and prints the reason as a callout above its
 description.
+
+#### `@warning`
+
+A danger the caller has to know about, printed as a callout after the
+description. Several warnings are listed in one callout. The tag comes from
+shdoc.
+
+```bash
+# @warning Nothing is asked before deleting.
+```
+
+#### `@since`
+
+The version the function first appeared in, printed under its heading.
 
 #### `@see`
 
@@ -415,20 +451,77 @@ sh-docs: src/strings.sh:6: unknown tag @descripton
 sh-docs: src/strings.sh:7: strings::trim has no @description
 ```
 
+`--strict` also reads the body of each public function and reports a `$N` or
+`${N...}` it uses without an `@arg $N`; `@arg $@` covers every position. It
+skips comments, single-quoted text such as an awk program, and escaped dollars,
+and takes the body to end at the `}` or `)` indented like the declaration,
+which is how shfmt writes it.
+
 A function is private, and needs no description, when its name or the last
 `::` part of it starts with `_`; an `@internal` one is not documented at all.
 
+### Several files at once
+
+With `--output-dir`, sh-docs takes any number of sources and writes one
+document each into that directory, named after the source with a `.sh`,
+`.bash`, `.zsh` or `.ksh` extension dropped. `--index` adds an `index.md` that
+lists the documents with their brief. `--check` and `--strict` cover every
+file, and fail if any one does.
+
+```bash
+sh-docs --output-dir docs --index src/*.sh
+sh-docs --check --output-dir docs --index src/*.sh
+```
+
+### Other output options
+
+`--line-links` adds a link under each function heading to the line it is
+declared on, such as `src/strings.sh#L12`. It is off by default: any edit above
+a function moves its line, and a committed document would go stale with it.
+
+`--no-emoji` prints every heading, label and callout without its emoji. The
+anchors do not change.
+
+### prek and pre-commit
+
+The repository ships two hooks, for [prek](https://github.com/j178/prek) and
+pre-commit: `sh-docs` regenerates the documents of the staged shell sources,
+and `sh-docs-check` fails when one of them is missing or stale. Both write to
+`docs/` by default; an `args` override must keep `--output-dir`. gawk has to be
+on `PATH`.
+
+```yaml
+repos:
+  - repo: https://github.com/dynamotn/sh-docs
+    rev: <a tag or commit>
+    hooks:
+      - id: sh-docs-check
+        args: [--output-dir, docs, --src-dir, lib]
+        files: ^lib/
+```
+
+A newly generated document is untracked, so the `sh-docs` hook reports it as
+passed; it fails once a committed document changes. `sh-docs-check` reports
+both.
+
 ```
 Usage: sh-docs [OPTION]... [FILE]
+  or:  sh-docs --output-dir DIR [OPTION]... FILE...
 
 Options:
   -o, --output FILE         write the document to FILE instead of stdout
+      --output-dir DIR      write one document per FILE into DIR, named after
+                            it without its shell extension
+      --index               with --output-dir, also write DIR/index.md
       --check               compare the document with the one in --output
                             instead of writing it; print a diff and exit 1
                             when it is missing or out of date
-      --strict              report unknown tags and public functions without
-                            @description on stderr, and exit 1 after writing
+      --strict              report unknown tags, public functions without
+                            @description and positional arguments without
+                            @arg on stderr, and exit 1 after writing
                             the document
+      --line-links          link each function to its line in the source
+      --no-emoji            print headings and labels without emoji
       --src-dir DIR         directory the documented sources live in
                             (default: src)
       --doc-dir DIR         directory the generated documents live in, used to
@@ -479,7 +572,9 @@ documented function and lists them under "Related examples", skipping the ones
 
 ## Installation
 
-sh-docs needs `gawk` and `bash`.
+sh-docs needs `gawk` and Bash 4.4 or newer. On macOS, whose `/bin/bash` is
+3.2, install a newer one, for instance with Homebrew; sh-docs says so when it
+finds an older one.
 
 ```bash
 git clone https://github.com/dynamotn/sh-docs
@@ -502,7 +597,9 @@ generated document is not the same:
   reference groups, and back to the source file;
 * arguments, options and environment variables are rendered as tables rather
   than definition lists, and section headings carry an emoji;
-* `@usage`, `@tip`, `@note`, `@license` and "Related examples" are additions;
+* `@usage`, `@tip`, `@note`, `@license`, `@since` and "Related examples" are
+  additions, and the header documents a script's command line;
+* optional arguments and defaults get their own table columns;
 * `@section` is not sticky: each documented function carries its own;
 * an index of functions is printed as a "Highlights" list, with the first
   sentence of each description;

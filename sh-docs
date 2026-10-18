@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # @file sh-docs
 # @brief Generate Markdown API documentation from shell doc comments.
-# @description Reads a shell script from a file or from standard input and
+# @description Reads shell scripts from files or from standard input and
 #   writes GitHub-flavored Markdown. All the real work happens in
 #   `sh-docs.awk`; this wrapper only locates it, translates command-line
 #   options into awk variables, and keeps the exit status meaningful.
@@ -18,13 +18,28 @@
 
 set -euo pipefail
 
+# The Bash 3.2 that macOS ships fails further down with "unbound variable" on
+# the first empty array, which says nothing about the actual problem.
+if ((BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4))); then
+  printf 'sh-docs: bash 4.4 or newer is required, found %s\n' "${BASH_VERSION}" >&2
+  exit 1
+fi
+shopt -s inherit_errexit
+
 readonly SH_DOCS_VERSION='1.0.0'
 
 # The awk program sits next to this script when running from a checkout, and in
-# its own share directory once installed.
-readonly SELF="${BASH_SOURCE[0]}"
-SELF_DIR="$(readlink -f "${SELF}")"
-SELF_DIR="$(dirname "${SELF_DIR}")"
+# its own share directory once installed. The script may be reached through a
+# chain of symbolic links, which `readlink -f` would follow in one call, but
+# only in the GNU tools.
+SELF="${BASH_SOURCE[0]}"
+while [[ -L ${SELF} ]]; do
+  SELF_LINK="$(readlink -- "${SELF}")"
+  [[ ${SELF_LINK} == /* ]] || SELF_LINK="${SELF%/*}/${SELF_LINK}"
+  SELF="${SELF_LINK}"
+done
+readonly SELF
+SELF_DIR="$(dirname "${SELF}")"
 SELF_DIR="$(cd "${SELF_DIR}" && pwd)"
 readonly SELF_DIR
 readonly AWK_PROGRAM="${SH_DOCS_AWK:-${SELF_DIR}/sh-docs.awk}"
@@ -35,19 +50,26 @@ readonly AWK_PROGRAM="${SH_DOCS_AWK:-${SELF_DIR}/sh-docs.awk}"
 function _usage {
   cat << 'EOF'
 Usage: sh-docs [OPTION]... [FILE]
+  or:  sh-docs --output-dir DIR [OPTION]... FILE...
 
 Generate Markdown API documentation from the doc comments of a shell script.
 FILE defaults to standard input, which can also be named "-"; the document is
-written to standard output unless --output is given.
+written to standard output unless --output or --output-dir is given.
 
 Options:
   -o, --output FILE         write the document to FILE instead of stdout
+      --output-dir DIR      write one document per FILE into DIR, named after
+                            it without its shell extension
+      --index               with --output-dir, also write DIR/index.md
       --check               compare the document with the one in --output
                             instead of writing it; print a diff and exit 1
                             when it is missing or out of date
-      --strict              report unknown tags and public functions without
-                            @description on stderr, and exit 1 after writing
+      --strict              report unknown tags, public functions without
+                            @description and positional arguments without
+                            @arg on stderr, and exit 1 after writing
                             the document
+      --line-links          link each function to its line in the source
+      --no-emoji            print headings and labels without emoji
       --src-dir DIR         directory the documented sources live in
                             (default: src)
       --doc-dir DIR         directory the generated documents live in, used to
@@ -70,6 +92,7 @@ Examples:
   sh-docs < lib.sh > docs/lib.md
   sh-docs --source-path lib/strings.sh lib/strings.sh -o docs/strings.md
   sh-docs --check src/strings.sh -o docs/strings.md
+  sh-docs --output-dir docs --index src/*.sh
 EOF
 }
 
@@ -88,7 +111,7 @@ function _die {
 # @exitcode 0 The argument is there
 # @exitcode 1 The argument is missing
 function _need_value {
-  (($2 >= 2)) || _die "option $1 requires an argument"
+  ((10#$2 >= 2)) || _die "option $1 requires an argument"
 }
 
 # @description Turn a long option into the awk variable it sets: `--src-dir`
@@ -101,19 +124,59 @@ function _awk_var {
   printf '%s' "${_name//-/_}"
 }
 
-# @description Compare a rendered document with the one at a path, byte for
-#   byte, without writing anything.
-# @arg $1 string The rendered document, without its final newline
-# @arg $2 string Path of the document to compare with
-# @stdout A unified diff from the document at the path to the rendered one,
-#   when they differ
-# @stderr A note naming the missing or stale document
-# @exitcode 0 The document is up to date
-# @exitcode 1 The document is missing or differs
-function _check_output {
-  local _rendered="$1" _path="$2" _current="$2" _state='out of date'
+# @description Run the awk program over one source. The awk variables come
+#   from the `_awk_vars` array of `_main`.
+# @arg $1 string Name of the variable to store the document in, without its
+#   final newline
+# @arg $2 string Name of the variable to set to 1 when --strict reported a
+#   problem
+# @arg $3 string The source, or `-` or empty for standard input
+# @arg $@ any Further awk variable assignments, after the source
+# @exitcode 0 The document was rendered
+# @exitcode 1 awk failed
+function _render {
+  local _into="$1" _failed_var="$2" _source="$3" _document _status=0
+  local -a _awk_input=()
+  shift 3
 
-  if printf '%s\n' "${_rendered}" | cmp -s -- "${_path}" -; then
+  # `-` names standard input, as it does for most filters.
+  if [[ -n ${_source} && ${_source} != - ]]; then
+    _awk_input=("${_source}")
+  fi
+  # awk exits 3 when --strict found something to report. The document is
+  # complete all the same, so it is still delivered, and the failure reported
+  # once it has been.
+  _document="$(gawk "${_awk_vars[@]}" "$@" -f "${AWK_PROGRAM}" -- "${_awk_input[@]}")" \
+    || _status=$?
+  ((_status == 0 || _status == 3)) || exit "${_status}"
+  printf -v "${_into}" '%s' "${_document}"
+  ((_status == 0)) || printf -v "${_failed_var}" '%d' 1
+}
+
+# @description Write a rendered document, or under --check compare it with the
+#   one already at the path, byte for byte, without writing anything.
+# @arg $1 string Name of the variable to set to 1 when --check found the
+#   document missing or stale
+# @arg $2 string The rendered document, without its final newline
+# @arg $3 string Path of the document, or empty for standard output
+# @stdout The document when the path is empty; under --check, a unified diff
+#   from the document at the path to the rendered one, when they differ
+# @stderr Under --check, a note naming a missing or stale document
+function _deliver {
+  local _failed_var="$1" _document="$2" _path="$3" _current="$3"
+  local _state='out of date'
+
+  if ((! _check)); then
+    # Writing straight to the path would truncate it before awk had produced
+    # anything; by now the document is complete.
+    if [[ -n ${_path} ]]; then
+      printf '%s\n' "${_document}" > "${_path}"
+    else
+      printf '%s\n' "${_document}"
+    fi
+    return 0
+  fi
+  if printf '%s\n' "${_document}" | cmp -s -- "${_path}" -; then
     return 0
   fi
   if [[ ! -f ${_path} ]]; then
@@ -122,24 +185,87 @@ function _check_output {
   fi
   # diff exits 1 whenever it finds a difference, which is the expected case
   # here; only its output matters.
-  printf '%s\n' "${_rendered}" \
+  printf '%s\n' "${_document}" \
     | diff -u --label "${_path}" --label "${_path} (generated)" \
       -- "${_current}" - \
     || true
   printf 'sh-docs: %s is %s\n' "${_path}" "${_state}" >&2
-  return 1
+  printf -v "${_failed_var}" '%d' 1
 }
 
-# @description Parse the command line and render the document.
+# @description The document a source is written to under --output-dir: its
+#   file name with a shell extension dropped, and `.md` added.
+# @arg $1 string The source
+# @arg $2 string The output directory
+# @stdout The path of the document
+function _doc_path {
+  local _name="${1##*/}"
+
+  case "${_name}" in
+    *.sh | *.bash | *.zsh | *.ksh) _name="${_name%.*}" ;;
+    *) ;;
+  esac
+  printf '%s/%s.md' "$2" "${_name}"
+}
+
+# @description Render every source into --output-dir, and the index when
+#   --index asked for one. Every source is checked before anything is written.
+# @arg $1 string Name of the variable to set to 1 when --check or --strict
+#   failed for any file
+# @arg $2 string The output directory
+# @arg $3 number 1 to write the index as well
+# @arg $@ any The sources, after the first three arguments
+# @exitcode 0 Every document was delivered
+# @exitcode 1 A source is unreadable, two sources share a document, or awk
+#   failed
+function _render_dir {
+  local _failed_var="$1" _output_dir="$2" _index_wanted="$3"
+  local _source _path _rendered _index='' _name _brief _i
+  local -a _inputs=() _paths=()
+  shift 3
+  _inputs=("$@")
+
+  for _source in "${_inputs[@]}"; do
+    [[ -r ${_source} ]] || _die "cannot read input file: ${_source}"
+    _path="$(_doc_path "${_source}" "${_output_dir}")"
+    for ((_i = 0; _i < ${#_paths[@]}; _i++)); do
+      [[ ${_paths[_i]} != "${_path}" ]] \
+        || _die "${_inputs[_i]} and ${_source} would both be written to ${_path}"
+    done
+    _paths+=("${_path}")
+  done
+
+  ((_check)) || mkdir -p -- "${_output_dir}"
+
+  for ((_i = 0; _i < ${#_inputs[@]}; _i++)); do
+    _render _rendered "${_failed_var}" "${_inputs[_i]}"
+    _deliver "${_failed_var}" "${_rendered}" "${_paths[_i]}"
+    if [[ ${_index_wanted} == 1 ]]; then
+      _render _rendered "${_failed_var}" "${_inputs[_i]}" -v strict=0 -v emit=summary
+      _name="${_rendered%%$'\t'*}"
+      _brief="${_rendered#*$'\t'}"
+      [[ -n ${_name} ]] || _name="${_inputs[_i]##*/}"
+      _path="${_paths[_i]##*/}"
+      _index+=$'\n'"- [${_name}](${_path})${_brief:+ — ${_brief}}"
+    fi
+  done
+
+  if [[ ${_index_wanted} == 1 ]]; then
+    _deliver "${_failed_var}" "# Index"$'\n'"${_index}" "${_output_dir}/index.md"
+  fi
+}
+
+# @description Parse the command line and render the documents.
 # @arg $@ any The command line, as given to the script
-# @stdout The generated document, unless --output was given
-# @exitcode 0 The document was generated
-# @exitcode 1 The invocation was invalid, the input was unreadable, awk
-#   failed, --check found the document missing or out of date, or --strict
+# @stdout The generated document, unless --output or --output-dir was given
+# @exitcode 0 The documents were generated
+# @exitcode 1 The invocation was invalid, an input was unreadable, awk
+#   failed, --check found a document missing or out of date, or --strict
 #   reported a problem
 function _main {
-  local _input='' _output='' _rendered _check=0 _value _status=0
-  local -a _awk_vars=() _inputs=() _awk_input=()
+  local _output='' _output_dir='' _rendered _value _source
+  local -i _check=0 _failed=0 _index_wanted=0 _has_source_path=0
+  local -a _awk_vars=() _inputs=()
 
   # dyshellint disable=BSG051 sh-docs depends on gawk and bash alone, by
   # design, so the spec helpers the guide points at are not available here.
@@ -162,17 +288,32 @@ function _main {
         _output="${1#*=}"
         shift
         ;;
+      --output-dir)
+        _need_value "$1" $#
+        _output_dir="${2%/}"
+        shift 2
+        ;;
+      --output-dir=*)
+        _output_dir="${1#*=}"
+        _output_dir="${_output_dir%/}"
+        shift
+        ;;
+      --index)
+        _index_wanted=1
+        shift
+        ;;
       --check)
         _check=1
         shift
         ;;
-      --strict)
-        _awk_vars+=(-v strict=1)
+      --strict | --line-links | --no-emoji)
+        _awk_vars+=(-v "$(_awk_var "$1")=1")
         shift
         ;;
       --src-dir | --doc-dir | --root-files | --source-path | --link-dirs | \
         --example-dir | --example-prefix)
         _need_value "$1" $#
+        [[ $1 != --source-path ]] || _has_source_path=1
         # awk reads escape sequences in a `-v` value, so `lib\new` would
         # arrive as `lib`, a newline and `ew` unless every backslash is doubled.
         _value="${2//\\/\\\\}"
@@ -181,6 +322,7 @@ function _main {
         ;;
       --src-dir=* | --doc-dir=* | --root-files=* | --source-path=* | \
         --link-dirs=* | --example-dir=* | --example-prefix=*)
+        [[ $1 != --source-path=* ]] || _has_source_path=1
         _value="${1#*=}"
         _value="${_value//\\/\\\\}"
         _awk_vars+=(-v "$(_awk_var "${1%%=*}")=${_value}")
@@ -205,41 +347,40 @@ function _main {
     esac
   done
 
-  ((${#_inputs[@]} <= 1)) || _die "at most one input file is accepted"
-  _input="${_inputs[0]-}"
-  ((!_check)) || [[ -n ${_output} ]] \
-    || _die '--check needs --output FILE to compare against'
+  [[ -z ${_output} || -z ${_output_dir} ]] \
+    || _die '--output and --output-dir cannot be combined'
+  ((! _index_wanted)) || [[ -n ${_output_dir} ]] \
+    || _die '--index needs --output-dir'
+  if [[ -n ${_output_dir} ]]; then
+    # Standard input has no name to derive a document from.
+    ((${#_inputs[@]})) || _die '--output-dir needs input files'
+    for _source in "${_inputs[@]}"; do
+      [[ ${_source} != - ]] || _die '--output-dir needs input files'
+    done
+    ((${#_inputs[@]} == 1 || ! _has_source_path)) \
+      || _die '--source-path names one source, not several'
+  else
+    ((${#_inputs[@]} <= 1)) || _die 'several input files need --output-dir'
+    ((! _check)) || [[ -n ${_output} ]] \
+      || _die '--check needs --output FILE to compare against'
+  fi
 
-  command -v gawk > /dev/null 2>&1 \
+  command -v gawk &> /dev/null \
     || _die 'gawk is required but was not found on PATH'
   [[ -r ${AWK_PROGRAM} ]] \
     || _die "cannot read the awk program at ${AWK_PROGRAM}"
 
-  # `-` names standard input, as it does for most filters.
-  if [[ -n ${_input} && ${_input} != - ]]; then
-    [[ -r ${_input} ]] || _die "cannot read input file: ${_input}"
-    _awk_input=("${_input}")
-  fi
-
-  # Writing straight to --output would truncate the destination before awk has
-  # produced anything, so a failed run would leave an empty document behind
-  # where a readable one used to be.
-  #
-  # awk exits 3 when --strict found something to report. The document is
-  # complete all the same, so it is still written, and the failure reported
-  # once it has been.
-  _rendered="$(gawk "${_awk_vars[@]}" -f "${AWK_PROGRAM}" -- "${_awk_input[@]}")" \
-    || _status=$?
-  ((_status == 0 || _status == 3)) || exit "${_status}"
-
-  if ((_check)); then
-    _check_output "${_rendered}" "${_output}"
-  elif [[ -n ${_output} ]]; then
-    printf '%s\n' "${_rendered}" > "${_output}"
+  if [[ -n ${_output_dir} ]]; then
+    _render_dir _failed "${_output_dir}" "${_index_wanted}" "${_inputs[@]}"
   else
-    printf '%s\n' "${_rendered}"
+    _source="${_inputs[0]-}"
+    if [[ -n ${_source} && ${_source} != - ]]; then
+      [[ -r ${_source} ]] || _die "cannot read input file: ${_source}"
+    fi
+    _render _rendered _failed "${_source}"
+    _deliver _failed "${_rendered}" "${_output}"
   fi
-  ((_status == 0))
+  ((_failed == 0))
 }
 
 _main "$@"

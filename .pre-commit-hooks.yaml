@@ -1,0 +1,19 @@
+# Hooks for prek and pre-commit. Both take the sources they are given and the
+# documents under --output-dir, so `args` must keep `--output-dir` when it is
+# overridden. gawk has to be on PATH.
+- id: sh-docs
+  name: sh-docs
+  description: Regenerate the Markdown documents of the shell sources.
+  entry: sh-docs
+  language: script
+  types: [shell]
+  args: [--output-dir, docs]
+  require_serial: true
+
+- id: sh-docs-check
+  name: sh-docs (check)
+  description: Fail when the document of a shell source is missing or stale.
+  entry: sh-docs --check
+  language: script
+  types: [shell]
+  args: [--output-dir, docs]

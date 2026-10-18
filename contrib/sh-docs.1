@@ -4,6 +4,10 @@ sh\-docs \- generate Markdown API documentation from shell doc comments
 .SH SYNOPSIS
 .B sh\-docs
 [\fIOPTION\fR]... [\fIFILE\fR]
+.br
+.B sh\-docs
+.B \-\-output\-dir
+\fIDIR\fR [\fIOPTION\fR]... \fIFILE\fR...
 .SH DESCRIPTION
 .B sh\-docs
 reads a shell script and writes GitHub\-flavored Markdown describing it.
@@ -30,7 +34,8 @@ header takes
 .BR @see ,
 .BR @tip ,
 .BR @deprecated ,
-.B @license
+.BR @license ,
+.B @since
 and
 .BR @namespace ,
 plus the command line of a script:
@@ -57,13 +62,24 @@ A function takes
 .BR @note ,
 .BR @tip ,
 .BR @see ,
-.B @deprecated
+.BR @deprecated ,
+.BR @warning ,
+.B @since
 and
 .BR @internal .
 .SH OPTIONS
 .TP
 .BR \-o ", " \-\-output " \fIFILE\fR"
 Write the document to \fIFILE\fR instead of standard output.
+.TP
+.BR \-\-output\-dir " \fIDIR\fR"
+Write one document per \fIFILE\fR into \fIDIR\fR, named after it with a
+\fB.sh\fR, \fB.bash\fR, \fB.zsh\fR or \fB.ksh\fR extension dropped. Any number
+of \fIFILE\fRs can be given, and standard input cannot.
+.TP
+.B \-\-index
+With \fB\-\-output\-dir\fR, also write \fIDIR\fB/index.md\fR, listing the
+documents with their brief.
 .TP
 .B \-\-check
 Compare the document with the one already in the \fB\-\-output\fR file, byte
@@ -72,11 +88,19 @@ unified diff on standard output, name the file on standard error, and exit 1.
 The file is never written. Requires \fB\-\-output\fR.
 .TP
 .B \-\-strict
-Report every tag sh\-docs does not know, and every public function without
-\fB@description\fR, on standard error with its line number. The document is
+Report every tag sh\-docs does not know, every public function without
+\fB@description\fR, and every \fB$\fIN\fR a public function reads without an
+\fB@arg $\fIN\fR, on standard error with its line number. The document is
 written all the same, and the exit status is 1. A function whose name, or the
 last \fB::\fR part of it, starts with \fB_\fR is private and needs no
 description.
+.TP
+.B \-\-line\-links
+Link each function to the line it is declared on. Off by default, since any
+edit above a function moves its line.
+.TP
+.B \-\-no\-emoji
+Print every heading, label and callout without its emoji.
 .TP
 .BR \-\-src\-dir " \fIDIR\fR"
 Directory the documented sources live in. Default: \fBsrc\fR.
