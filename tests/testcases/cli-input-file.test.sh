@@ -31,3 +31,9 @@ tests::run --output doc.md source.sh
 tests::assert_exitcode 0
 tests::assert_no_diff expected doc.md
 [[ ! -s stdout ]] || tests::fail 'stdout should be empty when --output is given'
+
+# `-` names standard input.
+tests::put input < source.sh
+tests::run -
+tests::assert_exitcode 0
+tests::assert_no_diff expected stdout

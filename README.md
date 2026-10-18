@@ -367,6 +367,7 @@ Markdown to standard output.
 ```bash
 sh-docs < your-shell-script.sh > docs/lib.md
 sh-docs your-shell-script.sh --output docs/lib.md
+cat your-shell-script.sh | sh-docs - > docs/lib.md
 ```
 
 ```

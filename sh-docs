@@ -37,8 +37,8 @@ function _usage {
 Usage: sh-docs [OPTION]... [FILE]
 
 Generate Markdown API documentation from the doc comments of a shell script.
-FILE defaults to standard input; the document is written to standard output
-unless --output is given.
+FILE defaults to standard input, which can also be named "-"; the document is
+written to standard output unless --output is given.
 
 Options:
   -o, --output FILE         write the document to FILE instead of stdout
@@ -141,6 +141,10 @@ function _main {
         _inputs+=("$@")
         break
         ;;
+      -)
+        _inputs+=("$1")
+        shift
+        ;;
       -*)
         _die "unknown option: $1 (try --help)"
         ;;
@@ -159,7 +163,8 @@ function _main {
   [[ -r ${AWK_PROGRAM} ]] \
     || _die "cannot read the awk program at ${AWK_PROGRAM}"
 
-  if [[ -n ${_input} ]]; then
+  # `-` names standard input, as it does for most filters.
+  if [[ -n ${_input} && ${_input} != - ]]; then
     [[ -r ${_input} ]] || _die "cannot read input file: ${_input}"
     _awk_input=("${_input}")
   fi
