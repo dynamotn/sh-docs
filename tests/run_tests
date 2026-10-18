@@ -18,7 +18,9 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+ROOT="$(readlink -f "${BASH_SOURCE[0]}")"
+ROOT="$(dirname "${ROOT}")"
+ROOT="$(cd "${ROOT}/.." && pwd)"
 readonly ROOT
 readonly TESTCASES_DIR="${ROOT}/tests/testcases"
 
@@ -107,7 +109,11 @@ function _main {
     mkdir -p "${_workdir}"
     _log="${_workdir}/.log"
 
-    if _run_testcase "${_testcase}" "${_workdir}" > "${_log}" 2>&1; then
+    # Calling the testcase from the `if` itself would switch `set -e` off
+    # inside it, so a failed assertion followed by a passing one would let the
+    # testcase pass. Started as a job of its own, it keeps `set -e`.
+    _run_testcase "${_testcase}" "${_workdir}" > "${_log}" 2>&1 &
+    if wait "$!"; then
       passed+=1
       printf '  ok   %s\n' "${_name}"
       ((_verbose)) && cat "${_log}"

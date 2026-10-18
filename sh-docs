@@ -23,7 +23,9 @@ readonly SH_DOCS_VERSION='1.0.0'
 # The awk program sits next to this script when running from a checkout, and in
 # its own share directory once installed.
 readonly SELF="${BASH_SOURCE[0]}"
-SELF_DIR="$(cd "$(dirname "$(readlink -f "${SELF}")")" && pwd)"
+SELF_DIR="$(readlink -f "${SELF}")"
+SELF_DIR="$(dirname "${SELF_DIR}")"
+SELF_DIR="$(cd "${SELF_DIR}" && pwd)"
 readonly SELF_DIR
 readonly AWK_PROGRAM="${SH_DOCS_AWK:-${SELF_DIR}/sh-docs.awk}"
 

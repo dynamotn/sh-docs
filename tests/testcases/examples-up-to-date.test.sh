@@ -5,7 +5,7 @@
 #   source it is generated from without anyone noticing. Regenerate it with
 #   `make examples`.
 
-cp "${SH_DOCS_ROOT}/examples/readme-example.md" expected
+cp "${SH_DOCS_ROOT:?exported by tests/run_tests}/examples/readme-example.md" expected
 tests::run "${SH_DOCS_ROOT}/examples/readme-example.sh"
 tests::assert_exitcode 0
 tests::assert_no_diff expected stdout

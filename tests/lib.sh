@@ -32,7 +32,7 @@ function tests::run {
   [[ -f input ]] && _stdin=input
 
   set +e
-  "${SH_DOCS}" "$@" < "${_stdin}" > stdout 2> stderr
+  "${SH_DOCS:?exported by tests/run_tests}" "$@" < "${_stdin}" > stdout 2> stderr
   TESTS_EXITCODE=$?
   set -e
 }
