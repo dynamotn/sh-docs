@@ -42,6 +42,9 @@ written to standard output unless --output is given.
 
 Options:
   -o, --output FILE         write the document to FILE instead of stdout
+      --check               compare the document with the one in --output
+                            instead of writing it; print a diff and exit 1
+                            when it is missing or out of date
       --src-dir DIR         directory the documented sources live in
                             (default: src)
       --doc-dir DIR         directory the generated documents live in, used to
@@ -63,6 +66,7 @@ Options:
 Examples:
   sh-docs < lib.sh > docs/lib.md
   sh-docs --source-path lib/strings.sh lib/strings.sh -o docs/strings.md
+  sh-docs --check src/strings.sh -o docs/strings.md
 EOF
 }
 
@@ -94,14 +98,43 @@ function _awk_var {
   printf '%s' "${_name//-/_}"
 }
 
+# @description Compare a rendered document with the one at a path, byte for
+#   byte, without writing anything.
+# @arg $1 string The rendered document, without its final newline
+# @arg $2 string Path of the document to compare with
+# @stdout A unified diff from the document at the path to the rendered one,
+#   when they differ
+# @stderr A note naming the missing or stale document
+# @exitcode 0 The document is up to date
+# @exitcode 1 The document is missing or differs
+function _check_output {
+  local _rendered="$1" _path="$2" _current="$2" _state='out of date'
+
+  if printf '%s\n' "${_rendered}" | cmp -s -- "${_path}" -; then
+    return 0
+  fi
+  if [[ ! -f ${_path} ]]; then
+    _current=/dev/null
+    _state='missing'
+  fi
+  # diff exits 1 whenever it finds a difference, which is the expected case
+  # here; only its output matters.
+  printf '%s\n' "${_rendered}" \
+    | diff -u --label "${_path}" --label "${_path} (generated)" \
+      -- "${_current}" - \
+    || true
+  printf 'sh-docs: %s is %s\n' "${_path}" "${_state}" >&2
+  return 1
+}
+
 # @description Parse the command line and render the document.
 # @arg $@ any The command line, as given to the script
 # @stdout The generated document, unless --output was given
 # @exitcode 0 The document was generated
-# @exitcode 1 The invocation was invalid, the input was unreadable, or awk
-#   failed
+# @exitcode 1 The invocation was invalid, the input was unreadable, awk
+#   failed, or --check found the document missing or out of date
 function _main {
-  local _input='' _output='' _rendered
+  local _input='' _output='' _rendered _check=0
   local -a _awk_vars=() _inputs=() _awk_input=()
 
   # dyshellint disable=BSG051 sh-docs depends on gawk and bash alone, by
@@ -123,6 +156,10 @@ function _main {
         ;;
       --output=*)
         _output="${1#*=}"
+        shift
+        ;;
+      --check)
+        _check=1
         shift
         ;;
       --src-dir | --doc-dir | --root-files | --source-path | --link-dirs | \
@@ -157,6 +194,8 @@ function _main {
 
   ((${#_inputs[@]} <= 1)) || _die "at most one input file is accepted"
   _input="${_inputs[0]-}"
+  ((!_check)) || [[ -n ${_output} ]] \
+    || _die '--check needs --output FILE to compare against'
 
   command -v gawk > /dev/null 2>&1 \
     || _die 'gawk is required but was not found on PATH'
@@ -174,7 +213,9 @@ function _main {
   # where a readable one used to be.
   _rendered="$(gawk "${_awk_vars[@]}" -f "${AWK_PROGRAM}" -- "${_awk_input[@]}")"
 
-  if [[ -n ${_output} ]]; then
+  if ((_check)); then
+    _check_output "${_rendered}" "${_output}"
+  elif [[ -n ${_output} ]]; then
     printf '%s\n' "${_rendered}" > "${_output}"
   else
     printf '%s\n' "${_rendered}"

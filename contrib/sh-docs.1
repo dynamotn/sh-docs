@@ -56,6 +56,12 @@ and
 .BR \-o ", " \-\-output " \fIFILE\fR"
 Write the document to \fIFILE\fR instead of standard output.
 .TP
+.B \-\-check
+Compare the document with the one already in the \fB\-\-output\fR file, byte
+for byte, instead of writing it. When that file is missing or differs, print a
+unified diff on standard output, name the file on standard error, and exit 1.
+The file is never written. Requires \fB\-\-output\fR.
+.TP
 .BR \-\-src\-dir " \fIDIR\fR"
 Directory the documented sources live in. Default: \fBsrc\fR.
 .TP
@@ -98,12 +104,12 @@ script.
 .SH EXIT STATUS
 .TP
 .B 0
-The document was generated.
+The document was generated, or \fB\-\-check\fR found it up to date.
 .TP
 .B 1
-The invocation was invalid, the input could not be read, or awk failed.
+The invocation was invalid, the input could not be read, awk failed, or
+\fB\-\-check\fR found the document missing or out of date.
 .SH EXAMPLES
-.PP
 Generate a document for one module:
 .PP
 .RS
@@ -117,6 +123,14 @@ Document a module that lives outside the default layout:
 .RS
 .nf
 sh\-docs \-\-source\-path lib/text/strings.sh lib/text/strings.sh \-o docs/strings.md
+.fi
+.RE
+.PP
+Fail a CI job when a committed document has fallen behind its source:
+.PP
+.RS
+.nf
+sh\-docs \-\-check src/strings.sh \-o docs/strings.md
 .fi
 .RE
 .SH SEE ALSO

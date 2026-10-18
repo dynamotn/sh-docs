@@ -25,8 +25,8 @@ examples:
 
 # The generated example is committed, so it can fall behind the source it is
 # generated from. The testcase of the same name checks it in the suite too.
-check-examples: examples
-	git diff --exit-code -- examples/
+check-examples:
+	$(MAKE) -C examples/ check
 
 # dyshellint drives ShellCheck and shfmt itself, so it is the whole shell pass.
 lint:

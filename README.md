@@ -370,11 +370,26 @@ sh-docs your-shell-script.sh --output docs/lib.md
 cat your-shell-script.sh | sh-docs - > docs/lib.md
 ```
 
+Committed documents fall behind their sources without anyone noticing. With
+`--check`, sh-docs compares the document it would write with the `--output`
+file, byte for byte, and writes nothing. A missing or stale document prints a
+unified diff on stdout and fails with exit status 1, which makes it a CI step:
+
+```bash
+for src in src/*.sh; do
+  sh-docs --check "$src" --output "docs/$(basename "${src%.sh}").md" || stale=1
+done
+exit "${stale:-0}"
+```
+
 ```
 Usage: sh-docs [OPTION]... [FILE]
 
 Options:
   -o, --output FILE         write the document to FILE instead of stdout
+      --check               compare the document with the one in --output
+                            instead of writing it; print a diff and exit 1
+                            when it is missing or out of date
       --src-dir DIR         directory the documented sources live in
                             (default: src)
       --doc-dir DIR         directory the generated documents live in, used to
