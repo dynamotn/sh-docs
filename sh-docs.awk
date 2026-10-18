@@ -29,6 +29,10 @@ BEGIN {
 	fn_count = 0
 	function_declaration = ""
 	pending_section = ""
+	# A declaration with its body opened on the same line, and one whose body
+	# opens on the next line.
+	FN_OPEN = "^[[:blank:]]*(function[[:blank:]]+)?([a-zA-Z0-9_\\-:\\.]+)[[:blank:]]*(\\([[:blank:]]*\\))?[[:blank:]]*(\\{|\\(([^)]|$))"
+	FN_DECL = "^[[:blank:]]*(function[[:blank:]]+)?([a-zA-Z0-9_\\-:\\.]+)[[:blank:]]*(\\([[:blank:]]*\\))?[[:blank:]]*$"
 	init_layout()
 }
 
@@ -101,26 +105,30 @@ function path_prefix(text, slash)
 			next
 		}
 		header_done = 1
+		if (starts_function($0)) {
+			release_header_tail()
+		}
 		parse_header()
 	}
 	if ($0 ~ /^[[:space:]]*#/) {
 		pending_lines[++pending_count] = $0
 		next
 	}
-	if (match($0, /^[[:blank:]]*(function[[:blank:]]+)?([a-zA-Z0-9_\-:\.]+)[[:blank:]]*(\([[:blank:]]*\))?[[:blank:]]*\{/, m)) {
+	# The body of a function is a `{ ... }` group or a `( ... )` subshell. A
+	# `()` right after the name is the empty parameter list, never a body.
+	if (match($0, FN_OPEN, m) && is_declaration(m)) {
 		parse_function_block(m[2])
 		pending_count = 0
 		delete pending_lines
 		function_declaration = ""
 		next
 	}
-	if (match($0, /^[[:blank:]]*(function[[:blank:]]+)?([a-zA-Z0-9_\-:\.]+)[[:blank:]]*(\([[:blank:]]*\))?[[:blank:]]*$/, m)) {
-		function_declaration = $0
+	if (match($0, FN_DECL, m) && is_declaration(m)) {
+		function_declaration = m[2]
 		next
 	}
-	if ($0 ~ /^[[:blank:]]*\{/ && function_declaration != "") {
-		match(function_declaration, /^[[:blank:]]*(function[[:blank:]]+)?([a-zA-Z0-9_\-:\.]+)[[:blank:]]*(\([[:blank:]]*\))?[[:blank:]]*$/, m)
-		parse_function_block(m[2])
+	if ($0 ~ /^[[:blank:]]*[{(]/ && function_declaration != "") {
+		parse_function_block(function_declaration)
 		pending_count = 0
 		delete pending_lines
 		function_declaration = ""
@@ -142,6 +150,55 @@ END {
 		parse_header()
 	}
 	render_module()
+}
+
+# Bash only reads a line as a function declaration when it carries the
+# `function` keyword or the `()` after the name. Without that check a lone
+# command such as `fi` or `cleanup`, followed by a `{ ... }` group, would be
+# documented as a function, and the comment above a plain command would be
+# handed to the next function instead of being discarded.
+function is_declaration(m)
+{
+	return (m[1] != "" || m[3] != "")
+}
+
+function starts_function(line, m)
+{
+	return ((match(line, FN_OPEN, m) || match(line, FN_DECL, m)) && is_declaration(m))
+}
+
+# A header that ends at a statement, rather than at a blank line after `@file`,
+# swallows every comment above that statement. The block after its last blank
+# line is the documentation of the statement, unless it carries one of the tags
+# that only the header knows.
+function release_header_tail(i, last_blank, has_module_tag, line)
+{
+	last_blank = 0
+	for (i = header_count; i >= 1; i--) {
+		if (header_lines[i] ~ /^[[:space:]]*$/) {
+			last_blank = i
+			break
+		}
+	}
+	if (last_blank == 0 || last_blank == header_count) {
+		return
+	}
+	has_module_tag = 0
+	for (i = last_blank + 1; i <= header_count; i++) {
+		line = clean_comment(header_lines[i])
+		if (line ~ /^@(file|name|brief)([[:space:]]+|$)/) {
+			has_module_tag = 1
+			break
+		}
+	}
+	if (has_module_tag) {
+		return
+	}
+	for (i = last_blank + 1; i <= header_count; i++) {
+		pending_lines[++pending_count] = header_lines[i]
+		delete header_lines[i]
+	}
+	header_count = last_blank
 }
 
 function append_item(kind, idx, value, key)
@@ -627,7 +684,9 @@ function parse_header(i, line, mode, rest)
 		}
 		if (line ~ /^@tip([[:space:]]+|$)/) {
 			rest = trim(substr(line, 5))
-			push_item("module_tip", 0, rest)
+			if (rest != "") {
+				push_item("module_tip", 0, rest)
+			}
 			mode = "tip"
 			continue
 		}
@@ -783,7 +842,7 @@ function print_bullet_list(kind, idx, formatter, i, key, text, m)
 	}
 }
 
-function print_function(idx, fn_desc_key, fn_heading_level, starts_new_section)
+function print_function(idx, fn_desc_key, fn_heading_level, starts_new_section, i)
 {
 	starts_new_section = (fn_section[idx] != "" && fn_section[idx] != last_printed_section)
 	if (printed_reference_count > 0 && !starts_new_section) {
@@ -901,7 +960,7 @@ function print_related_examples(cmd, path, found, content, line, i, j, skip, rel
 		}
 		close(path)
 		for (i = 1; i <= fn_count; i++) {
-			if (index(content, fn_name[i]) > 0) {
+			if (mentions(content, fn_name[i])) {
 				rel_path = example_rel(path)
 				skip = 0
 				for (j = 1; j <= counts["module_see", 0]; j++) {
@@ -932,6 +991,23 @@ function print_related_examples(cmd, path, found, content, line, i, j, skip, rel
 		print "- " render_link(rel_path)
 	}
 	delete PROCINFO["sorted_in"]
+}
+
+# Whether `content` uses `name` as a whole word. A plain substring test would
+# relate an example calling `strings::trim_all` to `strings::trim` as well.
+function mentions(content, name, pos, at, before, after)
+{
+	pos = 1
+	while ((at = index(substr(content, pos), name)) > 0) {
+		at += pos - 1
+		before = (at == 1 ? "" : substr(content, at - 1, 1))
+		after = substr(content, at + length(name), 1)
+		if (before !~ /[[:alnum:]_:.-]/ && after !~ /[[:alnum:]_:.-]/) {
+			return 1
+		}
+		pos = at + 1
+	}
+	return 0
 }
 
 function shell_quote(text)
@@ -967,7 +1043,10 @@ function print_tips_section(i, j, has_tips)
 		if (counts["fn_tip", i] == 0) {
 			continue
 		}
-		print "### `" fn_name[i] "`"
+		# A heading here would claim the function's anchor before the reference
+		# does, since GitHub numbers repeated headings in document order: every
+		# link to the function would then land in the Tips section.
+		print "**" render_function_link(fn_name[i]) "**"
 		print ""
 		for (j = 1; j <= counts["fn_tip", i]; j++) {
 			print "- " items["fn_tip", i, j]
@@ -1105,7 +1184,8 @@ function render_module(i, desc, intro, usage, rest, n, j, line, in_rest)
 		print "### 🚀 Highlights"
 		print ""
 		for (i = 1; i <= fn_count; i++) {
-			print "- " render_function_link(fn_name[i]) " \342\200\224 " summary(texts["fn_desc", i])
+			line = summary(texts["fn_desc", i])
+			print "- " render_function_link(fn_name[i]) (line == "" ? "" : " \342\200\224 " line)
 		}
 		print ""
 	}

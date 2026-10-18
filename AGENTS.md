@@ -31,8 +31,10 @@ Recognition and rendering live in the same file but are separate concerns.
 reviewing a diff.
 
 Function detection supports `name()`, `function name`, `function name()`, and a
-declaration whose `{` sits on the next line. Preserve all four when touching
-those rules.
+declaration whose `{` sits on the next line, each with a `{ ... }` or `( ... )`
+body. Preserve all of them when touching those rules. A declaration must carry
+the `function` keyword or `()` (`is_declaration`), so a lone command is never
+taken for one.
 
 ## Layout configuration
 

@@ -213,7 +213,7 @@ The license of the module, printed as the last section.
 
 These are read from the comment block directly above a function definition. All
 four declaration forms are recognised, including an opening brace on its own
-line:
+line, and the body may be a `( ... )` subshell as well as a `{ ... }` group:
 
 ```bash
 name() { ... }
@@ -221,7 +221,12 @@ function name { ... }
 function name() { ... }
 name()
 { ... }
+name() ( ... )
 ```
+
+As in bash, a declaration needs the `function` keyword or the `()` after the
+name: a line holding a lone command such as `cleanup` is never taken for one,
+and the comment block above it is discarded.
 
 #### `@description`
 
@@ -314,8 +319,8 @@ with the function.
 
 #### `@tip`
 
-A practical note, collected into the document's "Tips" section under the
-function's name.
+A practical note, collected into the document's "Tips" section under a link to
+the function.
 
 #### `@deprecated`
 

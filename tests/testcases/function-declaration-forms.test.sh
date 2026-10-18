@@ -1,7 +1,8 @@
 # shellcheck shell=bash
 # @file tests/testcases/function-declaration-forms.test.sh
-# @brief Testcase for the four function declaration forms.
-# @description All four declaration forms are documented alike.
+# @brief Testcase for the function declaration forms.
+# @description All four declaration forms are documented alike, and so is a
+#   body written as a `( ... )` subshell instead of a `{ ... }` group.
 
 tests::put input << 'SH'
 #!/usr/bin/env bash
@@ -27,6 +28,17 @@ next::line()
 {
   :
 }
+
+# @description Subshell body.
+sub::shell() (
+  :
+)
+
+# @description Subshell body on the next line.
+function sub::next
+(
+  :
+)
 SH
 
 tests::put expected << 'MD'
@@ -45,6 +57,8 @@ tests::put expected << 'MD'
 - [`keyword::form`](#keywordform) — Keyword form.
 - [`both::form`](#bothform) — Keyword form with parentheses.
 - [`next::line`](#nextline) — Opening brace on the next line.
+- [`sub::shell`](#subshell) — Subshell body.
+- [`sub::next`](#subnext) — Subshell body on the next line.
 
 <a id="reference"></a>
 ## 📚 Reference
@@ -73,6 +87,20 @@ Keyword form with parentheses.
 ### `next::line`
 
 Opening brace on the next line.
+
+
+---
+
+### `sub::shell`
+
+Subshell body.
+
+
+---
+
+### `sub::next`
+
+Subshell body on the next line.
 MD
 
 tests::assert

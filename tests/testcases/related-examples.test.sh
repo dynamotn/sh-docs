@@ -2,7 +2,8 @@
 # @file tests/testcases/related-examples.test.sh
 # @brief Testcase for --example-dir.
 # @description --example-dir lists the example scripts that mention a documented
-#   function, in a stable order, skipping the ones @see already links to.
+#   function, in a stable order, skipping the ones @see already links to. A
+#   function counts as mentioned only as a whole word.
 
 mkdir -p example
 cat > example/trim.sh << 'SH'
@@ -10,6 +11,10 @@ strings::trim "  padded  "
 SH
 cat > example/lower.sh << 'SH'
 strings::lower "ABC"
+SH
+# A longer name that starts with a documented one is not a mention of it.
+cat > example/trim-all.sh << 'SH'
+strings::trim_all "  padded  "
 SH
 cat > example/unrelated.sh << 'SH'
 printf 'nothing to do with the module\n'

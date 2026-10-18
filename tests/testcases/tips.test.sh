@@ -2,11 +2,15 @@
 # @file tests/testcases/tips.test.sh
 # @brief Testcase for the @tip tag.
 # @description Module tips and function tips are collected into one Tips section.
+#   A function's tips sit under a bold link rather than a heading, so the
+#   function's anchor still belongs to its entry in the reference. An empty
+#   `@tip` adds nothing.
 
 tests::put input << 'SH'
 #!/usr/bin/env bash
 # @file strings.sh
 # @tip Source the module once; it is not idempotent.
+# @tip
 
 # @description Trim surrounding whitespace.
 # @tip Prefer this over a subshell with `sed`.
@@ -34,7 +38,7 @@ tests::put expected << 'MD'
 
 - Source the module once; it is not idempotent.
 
-### `strings::trim`
+**[`strings::trim`](#stringstrim)**
 
 - Prefer this over a subshell with `sed`.
 
