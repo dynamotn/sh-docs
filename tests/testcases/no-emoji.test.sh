@@ -28,6 +28,7 @@ tests::put expected << 'MD'
 > Use text.sh.
 
 <a id="overview"></a>
+
 ## Overview
 
 ### Environment
@@ -37,11 +38,13 @@ tests::put expected << 'MD'
 | **`STRINGS_LOCALE`** | string | Locale. |
 
 <a id="usage"></a>
+
 ## Usage
 
 strings.sh
 
 <a id="command-line"></a>
+
 ## Command line
 
 **Exit codes**
@@ -49,6 +52,7 @@ strings.sh
 - `0`: Always.
 
 <a id="see-also"></a>
+
 ## See also
 
 - [text.sh](#textsh)
@@ -96,6 +100,7 @@ tests::put expected << 'MD'
 > Reference sections: [Trimming](#trimming)
 
 <a id="overview"></a>
+
 ## Overview
 
 ### Highlights
@@ -103,6 +108,7 @@ tests::put expected << 'MD'
 - [`strings::trim`](#stringstrim) — Trim surrounding whitespace.
 
 <a id="tips"></a>
+
 ## Tips
 
 **[`strings::trim`](#stringstrim)**
@@ -110,9 +116,11 @@ tests::put expected << 'MD'
 - Trim once.
 
 <a id="reference"></a>
+
 ## Reference
 
 <a id="trimming"></a>
+
 ### Trimming
 
 #### `strings::trim`

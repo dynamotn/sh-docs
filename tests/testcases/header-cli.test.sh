@@ -34,14 +34,17 @@ Greet someone.
 > Jump to: [Overview](#overview) · [Usage](#usage) · [Command line](#command-line) · [See also](#see-also)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 
 <a id="usage"></a>
+
 ## 🚀 Usage
 
 greet [-l] NAME
 
 <a id="command-line"></a>
+
 ## 🖥️ Command line
 
 **🎛️ Options**
@@ -70,6 +73,7 @@ greet [-l] NAME
 - `1`: No name was given, or the name was empty.
 
 <a id="see-also"></a>
+
 ## 🔗 See also
 
 - [greet.md](#greetmd)

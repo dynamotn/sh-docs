@@ -27,6 +27,7 @@ tests::put expected << 'MD'
 > Jump to: [Overview](#overview) · [Tips](#tips) · [Reference](#reference)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 
 ### 🚀 Highlights
@@ -34,6 +35,7 @@ tests::put expected << 'MD'
 - [`strings::trim`](#stringstrim) — Trim surrounding whitespace.
 
 <a id="tips"></a>
+
 ## 💡 Tips
 
 - Source the module once; it is not idempotent.
@@ -43,6 +45,7 @@ tests::put expected << 'MD'
 - Prefer this over a subshell with `sed`.
 
 <a id="reference"></a>
+
 ## 📚 Reference
 
 ### `strings::trim`

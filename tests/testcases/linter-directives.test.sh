@@ -31,6 +31,7 @@ Helpers for text manipulation.
 > Jump to: [Overview](#overview) · [Reference](#reference)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 
 Trimming and folding.
@@ -41,6 +42,7 @@ Second paragraph.
 - [`strings::trim`](#stringstrim) — Trim surrounding whitespace.
 
 <a id="reference"></a>
+
 ## 📚 Reference
 
 ### `strings::trim`

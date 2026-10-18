@@ -25,6 +25,7 @@ tests::put expected << 'MD'
 > Jump to: [Overview](#overview) · [Reference](#reference)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 
 ### 🚀 Highlights
@@ -32,6 +33,7 @@ tests::put expected << 'MD'
 - [`strings::repeat`](#stringsrepeat) — Repeat a string.
 
 <a id="reference"></a>
+
 ## 📚 Reference
 
 ### `strings::repeat`

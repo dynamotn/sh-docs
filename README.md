@@ -414,6 +414,15 @@ Every `@see` entry is resolved as one of:
 * anything else — a GitHub-style anchor into the current document, which is how
   a reference to another function in the same module is linked.
 
+A function is linked by the anchor GitHub gives its heading, the slug of its
+name, unless that anchor is already taken: by a section of the document
+(`overview`, `usage`, `command-line`, `see-also`, `tips`, `reference`, or an
+`@section`), or by an earlier function whose name slugs alike. Such a function
+gets an explicit `fn-<slug>` anchor above its heading, and the highlights, the
+tips and every `@see` naming it link there. Without it, a function called
+`usage` could never be reached: a browser jumps to the first element with an
+id, which is the Usage section.
+
 Angle brackets in prose are left alone, so write `` `<value>` `` in a
 description if you want them to survive Markdown rendering. Only the option
 column escapes them for you.
@@ -514,12 +523,11 @@ Options:
                             it without its shell extension
       --index               with --output-dir, also write DIR/index.md
       --check               compare the document with the one in --output
-                            instead of writing it; print a diff and exit 1
-                            when it is missing or out of date
+                            instead of writing it; print a diff when it is
+                            missing or out of date
       --strict              report unknown tags, public functions without
                             @description and positional arguments without
-                            @arg on stderr, and exit 1 after writing
-                            the document
+                            @arg on stderr, after writing the document
       --line-links          link each function to its line in the source
       --no-emoji            print headings and labels without emoji
       --src-dir DIR         directory the documented sources live in
@@ -539,7 +547,18 @@ Options:
                             (default: example)
   -h, --help                show this help and exit
   -V, --version             show version information and exit
+
+Exit status:
+  0  the documents were generated, and nothing was found
+  1  --check found a document missing or stale, or --strict reported a problem
+  2  the invocation was invalid, an input was unreadable, or awk failed
 ```
+
+The exit status follows `diff` and `grep`: 0 when the documents were generated
+and nothing was found, 1 when `--check` found a document missing or stale or
+`--strict` reported a problem, and 2 when sh-docs itself could not do its job:
+an invalid invocation, an unreadable input, or a failing awk. A CI step can
+therefore regenerate the documents on 1 and stop on 2.
 
 The awk program can also be run on its own, with the same settings passed as
 awk variables:

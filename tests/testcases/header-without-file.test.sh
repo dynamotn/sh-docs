@@ -21,6 +21,7 @@ Helpers for text manipulation.
 > Jump to: [Overview](#overview) · [Reference](#reference)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 
 ### 🚀 Highlights
@@ -28,6 +29,7 @@ Helpers for text manipulation.
 - [`strings::trim`](#stringstrim) — Trim surrounding whitespace.
 
 <a id="reference"></a>
+
 ## 📚 Reference
 
 ### `strings::trim`
@@ -50,6 +52,7 @@ tests::put expected << 'MD'
 > Jump to: [Overview](#overview)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 
 The module overview.

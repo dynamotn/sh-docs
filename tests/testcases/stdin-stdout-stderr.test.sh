@@ -24,6 +24,7 @@ tests::put expected << 'MD'
 > Jump to: [Overview](#overview) · [Reference](#reference)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 
 ### 🚀 Highlights
@@ -31,6 +32,7 @@ tests::put expected << 'MD'
 - [`strings::lower`](#stringslower) — Fold stdin to lower case.
 
 <a id="reference"></a>
+
 ## 📚 Reference
 
 ### `strings::lower`

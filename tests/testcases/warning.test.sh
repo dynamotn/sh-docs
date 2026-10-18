@@ -32,6 +32,7 @@ tests::put expected << 'MD'
 > Jump to: [Overview](#overview) · [Reference](#reference)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 
 ### 🚀 Highlights
@@ -40,6 +41,7 @@ tests::put expected << 'MD'
 - [`fs::move`](#fsmove) — Move a file.
 
 <a id="reference"></a>
+
 ## 📚 Reference
 
 ### `fs::remove`
@@ -55,7 +57,6 @@ Remove a directory.
 | Name | Type | Description |
 | --- | --- | --- |
 | `$1` | string | The directory. |
-
 
 ---
 

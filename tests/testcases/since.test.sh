@@ -30,6 +30,7 @@ _Since: 1.0.0_
 > Jump to: [Overview](#overview) · [Reference](#reference)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 
 ### 🚀 Highlights
@@ -37,6 +38,7 @@ _Since: 1.0.0_
 - [`strings::trim`](#stringstrim) — Trim surrounding whitespace.
 
 <a id="reference"></a>
+
 ## 📚 Reference
 
 ### `strings::trim`

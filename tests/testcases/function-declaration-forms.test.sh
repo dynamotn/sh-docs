@@ -49,6 +49,7 @@ tests::put expected << 'MD'
 > Jump to: [Overview](#overview) · [Reference](#reference)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 
 ### 🚀 Highlights
@@ -61,12 +62,12 @@ tests::put expected << 'MD'
 - [`sub::next`](#subnext) — Subshell body on the next line.
 
 <a id="reference"></a>
+
 ## 📚 Reference
 
 ### `posix::form`
 
 Posix form.
-
 
 ---
 
@@ -74,13 +75,11 @@ Posix form.
 
 Keyword form.
 
-
 ---
 
 ### `both::form`
 
 Keyword form with parentheses.
-
 
 ---
 
@@ -88,13 +87,11 @@ Keyword form with parentheses.
 
 Opening brace on the next line.
 
-
 ---
 
 ### `sub::shell`
 
 Subshell body.
-
 
 ---
 

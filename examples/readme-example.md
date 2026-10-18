@@ -9,6 +9,7 @@ A library that greets people.
 > Reference sections: [Greeting](#greeting) · [Compatibility](#compatibility)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 
 The module is the worked example used in the README. It shows
@@ -35,6 +36,7 @@ the tags a typical module uses:
 The module is self-contained and safe to source more than once.
 
 <a id="usage"></a>
+
 ## 🚀 Usage
 
 ```bash
@@ -43,20 +45,24 @@ greeting::say "World"
 ```
 
 <a id="see-also"></a>
+
 ## 🔗 See also
 
 - [src/strings.sh](../src/strings.sh)
 - [sh-docs](https://github.com/dynamotn/sh-docs)
 
 <a id="tips"></a>
+
 ## 💡 Tips
 
 - Source the module before setting `GREETING_WORD`; it is read on every call, not at load time.
 
 <a id="reference"></a>
+
 ## 📚 Reference
 
 <a id="greeting"></a>
+
 ### 🧩 Greeting
 
 #### `greeting::say`
@@ -112,7 +118,6 @@ greeting::say --loud "World"
 
 - [greeting::reply](#greetingreply)
 
-
 ---
 
 #### `greeting::reply`
@@ -133,8 +138,8 @@ _Function has no arguments._
 
 - `0`: The greeting was written.
 
-
 <a id="compatibility"></a>
+
 ### 🧩 Compatibility
 
 #### `greeting::hello`

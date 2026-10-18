@@ -39,6 +39,7 @@ tests::put expected << 'MD'
 > Jump to: [Overview](#overview) · [See also](#see-also) · [Reference](#reference)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 
 ### 🚀 Highlights
@@ -46,11 +47,13 @@ tests::put expected << 'MD'
 - [`strings::trim`](#stringstrim) — Trim surrounding whitespace.
 
 <a id="see-also"></a>
+
 ## 🔗 See also
 
 - [example/lower.sh](../example/lower.sh)
 
 <a id="reference"></a>
+
 ## 📚 Reference
 
 ### `strings::trim`

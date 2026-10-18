@@ -65,6 +65,12 @@ path rule belongs there, not inline.
   line number in the source, and only under `strict`. A tag that is new to a
   block must be added to `is_header_tag` or `is_function_tag`, or `--strict`
   reports it as unknown.
+* A function is linked through `fn_anchor_of`, never through `github_anchor` of
+  its name: `assign_fn_anchors` gives it an explicit `fn-<slug>` anchor when a
+  section of the document or an earlier function already holds its slug.
+* The wrapper exits 0 when nothing was found, 1 for a finding (`--check`,
+  `--strict`) and 2 for an error, through `_die`. A new failure picks one of
+  the two on purpose.
 * `@section` is not sticky by design: each documented function carries its own.
   Do not change that without updating the README and the testcases that rely on
   it.

@@ -22,6 +22,7 @@ tests::put expected << 'MD'
 > Jump to: [Overview](#overview) · [Reference](#reference)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 
 ### 🚀 Highlights
@@ -29,6 +30,7 @@ tests::put expected << 'MD'
 - [`say::version`](#sayversion) — Print the current version.
 
 <a id="reference"></a>
+
 ## 📚 Reference
 
 ### `say::version`

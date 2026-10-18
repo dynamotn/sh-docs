@@ -18,9 +18,11 @@ tests::put expected << 'MD'
 > Jump to: [Overview](#overview) · [See also](#see-also)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 
 <a id="see-also"></a>
+
 ## 🔗 See also
 
 - [lib/strings.sh](../lib/strings.sh)
@@ -41,6 +43,7 @@ tests::put expected << 'MD'
 > Jump to: [Overview](#overview)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 MD
 

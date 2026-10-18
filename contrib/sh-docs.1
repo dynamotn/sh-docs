@@ -144,12 +144,15 @@ script.
 .SH EXIT STATUS
 .TP
 .B 0
-The document was generated, or \fB\-\-check\fR found it up to date.
+The documents were generated, and \fB\-\-check\fR and \fB\-\-strict\fR found
+nothing.
 .TP
 .B 1
-The invocation was invalid, the input could not be read, awk failed,
-\fB\-\-check\fR found the document missing or out of date, or
-\fB\-\-strict\fR reported a problem.
+\fB\-\-check\fR found a document missing or out of date, or \fB\-\-strict\fR
+reported a problem.
+.TP
+.B 2
+The invocation was invalid, an input could not be read, or awk failed.
 .SH EXAMPLES
 Generate a document for one module:
 .PP

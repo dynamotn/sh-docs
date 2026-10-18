@@ -530,7 +530,8 @@ function render_link(text, url, raw)
 	if (text ~ /^[[:alpha:]][[:alnum:]+.-]*:\/\//) {
 		return "[" text "](" text ")"
 	}
-	url = github_anchor(text)
+	# A documented function may have been given an anchor of its own.
+	url = (text in fn_anchor_of ? fn_anchor_of[text] : github_anchor(text))
 	return "[" text "](#" url ")"
 }
 
@@ -560,7 +561,69 @@ function render_source_link(path)
 
 function render_function_link(name)
 {
-	return "[`" name "`](#" github_anchor(name) ")"
+	return "[`" name "`](#" fn_anchor_of[name] ")"
+}
+
+# Settle the anchor every function is linked by. GitHub gives a heading the
+# slug of its text, but the anchors of the document's own sections come first
+# in the page, and a browser jumps to the first element with an id. A function
+# named `usage`, or one whose name slugs like an earlier function's, would
+# never be reached; it gets an explicit `fn-<slug>` anchor instead.
+function assign_fn_anchors(i, slug, taken, anchor, n)
+{
+	taken["overview"] = 1
+	if (texts["module_usage", 0] != "") {
+		taken["usage"] = 1
+	}
+	if (has_command_line()) {
+		taken["command-line"] = 1
+	}
+	if (counts["module_see", 0] > 0) {
+		taken["see-also"] = 1
+	}
+	if (has_any_tips()) {
+		taken["tips"] = 1
+	}
+	if (fn_count > 0) {
+		taken["reference"] = 1
+	}
+	for (i = 1; i <= fn_count; i++) {
+		if (fn_section[i] != "") {
+			taken[github_anchor(fn_section[i])] = 1
+		}
+	}
+	for (i = 1; i <= fn_count; i++) {
+		slug = github_anchor(fn_name[i])
+		fn_explicit_anchor[i] = ""
+		if (! (slug in taken)) {
+			anchor = slug
+		} else {
+			anchor = "fn-" slug
+			for (n = 2; anchor in taken; n++) {
+				anchor = "fn-" slug "-" n
+			}
+			fn_explicit_anchor[i] = anchor
+		}
+		taken[slug] = 1
+		taken[anchor] = 1
+		fn_anchor[i] = anchor
+		if (! (fn_name[i] in fn_anchor_of)) {
+			fn_anchor_of[fn_name[i]] = anchor
+		}
+	}
+}
+
+function has_any_tips(i)
+{
+	if (counts["module_tip", 0] > 0) {
+		return 1
+	}
+	for (i = 1; i <= fn_count; i++) {
+		if (counts["fn_tip", i] > 0) {
+			return 1
+		}
+	}
+	return 0
 }
 
 function append_nav_link(nav, label, anchor)
@@ -576,7 +639,10 @@ function print_anchor(id)
 	if (id == "") {
 		return
 	}
+	# Without the blank line the anchor and the heading after it read as one
+	# block, which markdownlint reports as a heading without space above it.
 	print "<a id=\"" id "\"></a>"
+	print ""
 }
 
 function scan_pending_meta(i, line, rest)
@@ -1129,6 +1195,7 @@ function print_function(idx, fn_desc_key, fn_heading_level, starts_new_section, 
 		last_printed_section = fn_section[idx]
 	}
 	fn_heading_level = (fn_section[idx] != "" ? "####" : "###")
+	print_anchor(fn_explicit_anchor[idx])
 	print fn_heading_level " `" fn_name[idx] "`"
 	print ""
 	if (line_links && source_file() != "") {
@@ -1305,18 +1372,9 @@ function shell_quote(text)
 	return "'" text "'"
 }
 
-function print_tips_section(i, j, has_tips)
+function print_tips_section(i, j)
 {
-	has_tips = counts["module_tip", 0] > 0
-	if (! has_tips) {
-		for (i = 1; i <= fn_count; i++) {
-			if (counts["fn_tip", i] > 0) {
-				has_tips = 1
-				break
-			}
-		}
-	}
-	if (! has_tips) {
+	if (! has_any_tips()) {
 		return
 	}
 	print_anchor("tips")
@@ -1347,15 +1405,7 @@ function print_tips_section(i, j, has_tips)
 function print_quick_links(i, nav, section_nav, section_name, has_tips)
 {
 	nav = ""
-	has_tips = counts["module_tip", 0] > 0
-	if (! has_tips) {
-		for (i = 1; i <= fn_count; i++) {
-			if (counts["fn_tip", i] > 0) {
-				has_tips = 1
-				break
-			}
-		}
-	}
+	has_tips = has_any_tips()
 	nav = append_nav_link(nav, "Overview", "Overview")
 	if (texts["module_usage", 0] != "") {
 		nav = append_nav_link(nav, "Usage", "Usage")
@@ -1409,6 +1459,7 @@ function push_item(kind, idx, value, key)
 
 function render_module(i, desc, intro, usage, rest, n, j, line, in_rest)
 {
+	assign_fn_anchors()
 	last_printed_section = ""
 	printed_reference_count = 0
 	if (module_file != "") {
@@ -1519,9 +1570,6 @@ function render_module(i, desc, intro, usage, rest, n, j, line, in_rest)
 		print ""
 		for (i = 1; i <= fn_count; i++) {
 			print_function(i)
-			if (i < fn_count) {
-				print ""
-			}
 		}
 	}
 	# Every section above ends with a blank line of its own, so these two must

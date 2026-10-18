@@ -14,6 +14,11 @@
 #   `sh-docs.awk` next to this script.
 # @see
 #   - sh-docs.awk
+# @exitcode 0 The documents were generated, and nothing was found
+# @exitcode 1 --check found a document missing or stale, or --strict
+#   reported a problem
+# @exitcode 2 The invocation was invalid, an input was unreadable, or awk
+#   failed
 # @license MIT
 
 set -euo pipefail
@@ -22,7 +27,7 @@ set -euo pipefail
 # the first empty array, which says nothing about the actual problem.
 if ((BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4))); then
   printf 'sh-docs: bash 4.4 or newer is required, found %s\n' "${BASH_VERSION}" >&2
-  exit 1
+  exit 2
 fi
 shopt -s inherit_errexit
 
@@ -62,12 +67,11 @@ Options:
                             it without its shell extension
       --index               with --output-dir, also write DIR/index.md
       --check               compare the document with the one in --output
-                            instead of writing it; print a diff and exit 1
-                            when it is missing or out of date
+                            instead of writing it; print a diff when it is
+                            missing or out of date
       --strict              report unknown tags, public functions without
                             @description and positional arguments without
-                            @arg on stderr, and exit 1 after writing
-                            the document
+                            @arg on stderr, after writing the document
       --line-links          link each function to its line in the source
       --no-emoji            print headings and labels without emoji
       --src-dir DIR         directory the documented sources live in
@@ -88,6 +92,11 @@ Options:
   -h, --help                show this help and exit
   -V, --version             show version information and exit
 
+Exit status:
+  0  the documents were generated, and nothing was found
+  1  --check found a document missing or stale, or --strict reported a problem
+  2  the invocation was invalid, an input was unreadable, or awk failed
+
 Examples:
   sh-docs < lib.sh > docs/lib.md
   sh-docs --source-path lib/strings.sh lib/strings.sh -o docs/strings.md
@@ -96,20 +105,21 @@ Examples:
 EOF
 }
 
-# @description Report a fatal error and stop.
+# @description Report a fatal error and stop. The status is 2, as for `diff`
+#   and `grep`, so a caller can tell a broken run from the 1 of a finding.
 # @arg $1 string The message to report
 # @stderr The message, prefixed with the program name
-# @exitcode 1 Always
+# @exitcode 2 Always
 function _die {
   printf 'sh-docs: %s\n' "$1" >&2
-  exit 1
+  exit 2
 }
 
 # @description Stop unless an option was given the argument it needs.
 # @arg $1 string The option, as it was written
 # @arg $2 number The number of arguments still unparsed, the option included
 # @exitcode 0 The argument is there
-# @exitcode 1 The argument is missing
+# @exitcode 2 The argument is missing
 function _need_value {
   ((10#$2 >= 2)) || _die "option $1 requires an argument"
 }
@@ -133,7 +143,7 @@ function _awk_var {
 # @arg $3 string The source, or `-` or empty for standard input
 # @arg $@ any Further awk variable assignments, after the source
 # @exitcode 0 The document was rendered
-# @exitcode 1 awk failed
+# @exitcode 2 awk failed
 function _render {
   local _into="$1" _failed_var="$2" _source="$3" _document _status=0
   local -a _awk_input=()
@@ -148,7 +158,7 @@ function _render {
   # once it has been.
   _document="$(gawk "${_awk_vars[@]}" "$@" -f "${AWK_PROGRAM}" -- "${_awk_input[@]}")" \
     || _status=$?
-  ((_status == 0 || _status == 3)) || exit "${_status}"
+  ((_status == 0 || _status == 3)) || exit 2
   printf -v "${_into}" '%s' "${_document}"
   ((_status == 0)) || printf -v "${_failed_var}" '%d' 1
 }
@@ -216,7 +226,7 @@ function _doc_path {
 # @arg $3 number 1 to write the index as well
 # @arg $@ any The sources, after the first three arguments
 # @exitcode 0 Every document was delivered
-# @exitcode 1 A source is unreadable, two sources share a document, or awk
+# @exitcode 2 A source is unreadable, two sources share a document, or awk
 #   failed
 function _render_dir {
   local _failed_var="$1" _output_dir="$2" _index_wanted="$3"
@@ -258,10 +268,11 @@ function _render_dir {
 # @description Parse the command line and render the documents.
 # @arg $@ any The command line, as given to the script
 # @stdout The generated document, unless --output or --output-dir was given
-# @exitcode 0 The documents were generated
-# @exitcode 1 The invocation was invalid, an input was unreadable, awk
-#   failed, --check found a document missing or out of date, or --strict
+# @exitcode 0 The documents were generated, and nothing was found
+# @exitcode 1 --check found a document missing or out of date, or --strict
 #   reported a problem
+# @exitcode 2 The invocation was invalid, an input was unreadable, or awk
+#   failed
 function _main {
   local _output='' _output_dir='' _rendered _value _source
   local -i _check=0 _failed=0 _index_wanted=0 _has_source_path=0

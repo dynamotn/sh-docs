@@ -21,12 +21,13 @@ Helpers for text manipulation.
 > Jump to: [Overview](#overview)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 MD
 
 # --check compares against --output, so it has nothing to do without one.
 tests::run --check source.sh
-tests::assert_exitcode 1
+tests::assert_exitcode 2
 tests::assert_stderr_contains '--check needs --output'
 
 # A missing document is reported, and not created.

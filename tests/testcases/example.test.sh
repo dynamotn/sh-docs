@@ -32,6 +32,7 @@ tests::put expected << 'MD'
 > Jump to: [Overview](#overview) · [Reference](#reference)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 
 ### 🚀 Highlights
@@ -40,6 +41,7 @@ tests::put expected << 'MD'
 - [`strings::lower`](#stringslower) — Fold to lower case.
 
 <a id="reference"></a>
+
 ## 📚 Reference
 
 ### `strings::trim`
@@ -51,7 +53,6 @@ Trim surrounding whitespace.
 ```bash
 strings::trim "  padded  "
 ```
-
 
 ---
 

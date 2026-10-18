@@ -37,6 +37,7 @@ tests::put expected << 'MD'
 > Reference sections: [Trimming](#trimming) · [Casing](#casing)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 
 ### 🚀 Highlights
@@ -46,15 +47,16 @@ tests::put expected << 'MD'
 - [`strings::lower`](#stringslower) — Fold to lower case.
 
 <a id="reference"></a>
+
 ## 📚 Reference
 
 <a id="trimming"></a>
+
 ### 🧩 Trimming
 
 #### `strings::ltrim`
 
 Remove leading whitespace.
-
 
 ---
 
@@ -62,8 +64,8 @@ Remove leading whitespace.
 
 Remove trailing whitespace.
 
-
 <a id="casing"></a>
+
 ### 🧩 Casing
 
 #### `strings::lower`

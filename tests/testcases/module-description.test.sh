@@ -28,6 +28,7 @@ Helpers for text manipulation.
 > Jump to: [Overview](#overview)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 
 The module groups the string helpers used across the project.

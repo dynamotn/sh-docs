@@ -22,6 +22,7 @@ tests::put expected << 'MD'
 > Jump to: [Overview](#overview) · [Reference](#reference)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 
 ### 🚀 Highlights
@@ -29,6 +30,7 @@ tests::put expected << 'MD'
 - [`strings::strip`](#stringsstrip) — Trim surrounding whitespace.
 
 <a id="reference"></a>
+
 ## 📚 Reference
 
 ### `strings::strip`

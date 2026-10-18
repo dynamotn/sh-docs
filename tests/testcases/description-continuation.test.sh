@@ -32,6 +32,7 @@ tests::put expected << 'MD'
 > Jump to: [Overview](#overview) · [Reference](#reference)
 
 <a id="overview"></a>
+
 ## ✨ Overview
 
 ### 🚀 Highlights
@@ -40,6 +41,7 @@ tests::put expected << 'MD'
 - [`strings::lower`](#stringslower) — Fold to lower case. The value is returned on stdout, never in place.
 
 <a id="reference"></a>
+
 ## 📚 Reference
 
 ### `strings::trim`
@@ -47,7 +49,6 @@ tests::put expected << 'MD'
 Trim surrounding whitespace.
 
 The value is returned on stdout, never in place.
-
 
 ---
 
