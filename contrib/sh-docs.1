@@ -38,14 +38,15 @@ header takes
 .B @since
 and
 .BR @namespace ,
-plus the command line of a script:
+plus the command line and examples of a script:
 .BR @option ,
 .BR @arg ,
 .BR @stdin ,
 .BR @stdout ,
-.B @stderr
+.BR @stderr ,
+.B @exitcode
 and
-.BR @exitcode .
+.BR @example .
 A function takes
 .BR @description ,
 .BR @section ,
@@ -94,6 +95,18 @@ Report every tag sh\-docs does not know, every public function without
 written all the same, and the exit status is 1. A function whose name, or the
 last \fB::\fR part of it, starts with \fB_\fR is private and needs no
 description.
+.TP
+.BR \-\-format " \fIFORMAT\fR"
+\fBmarkdown\fR, the default, or \fBman\fR for a roff man page with the
+conventional sections, and the functions of a library under FUNCTIONS.
+.TP
+.BR \-\-man\-section " \fIN\fR"
+The section of a man page, 1 by default. Under \fB\-\-output\-dir\fR it is also
+the extension of each page.
+.TP
+.BR \-\-man\-date " \fIDATE\fR"
+The date in the header of a man page. There is none by default, so a page
+generated twice is the same both times.
 .TP
 .B \-\-line\-links
 Link each function to the line it is declared on. Off by default, since any

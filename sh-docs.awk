@@ -25,6 +25,9 @@
 #   line_links     when 1, link each function to its line in the source
 #                                                               (default 0)
 #   no_emoji       when 1, print headings and labels without emoji (default 0)
+#   format         "markdown", or "man" for a roff man page    (default "markdown")
+#   man_section    the section of a man page                    (default "1")
+#   man_date       the date in the header of a man page         (default "")
 #   emit           "summary" prints the module name and brief, separated by a
 #                  tab, instead of the document; the wrapper builds the
 #                  index from it                                (default "")
@@ -45,7 +48,7 @@ BEGIN {
 	FN_DECL = "^[[:blank:]]*(function[[:blank:]]+)?([a-zA-Z0-9_\\-:\\.]+)[[:blank:]]*(\\([[:blank:]]*\\))?[[:blank:]]*$"
 	# The tags each kind of block understands. `--strict` reports any other.
 	split("file name brief description usage see tip env license deprecated namespace" \
-		" since arg option exitcode stdin stdout stderr", parts, " ")
+		" since arg option exitcode stdin stdout stderr example", parts, " ")
 	for (i in parts) {
 		is_header_tag[parts[i]] = 1
 	}
@@ -188,7 +191,11 @@ END {
 		print module_file "\t" module_brief
 		exit
 	}
-	render_module()
+	if (format == "man") {
+		render_man()
+	} else {
+		render_module()
+	}
 	# The document is complete either way; the status tells the wrapper that
 	# `--strict` found something to report.
 	if (strict && warned) {
@@ -578,6 +585,9 @@ function assign_fn_anchors(i, slug, taken, anchor, n)
 	if (has_command_line()) {
 		taken["command-line"] = 1
 	}
+	if (counts["module_example", 0] > 0) {
+		taken["examples"] = 1
+	}
 	if (counts["module_see", 0] > 0) {
 		taken["see-also"] = 1
 	}
@@ -865,7 +875,7 @@ function parse_function_block(name, nr, i, line, mode, key, rest, parts, argline
 	body_fn = fn_count
 }
 
-function parse_header(i, line, mode, rest)
+function parse_header(i, line, mode, rest, key)
 {
 	mode = ""
 	for (i = 1; i <= header_count; i++) {
@@ -885,6 +895,9 @@ function parse_header(i, line, mode, rest)
 				append_text("module_desc", 0, "__BLANK__")
 			} else if (mode == "usage") {
 				append_text("module_usage", 0, "__BLANK__")
+			} else if (mode == "example" && counts["module_example", 0] > 0) {
+				items["module_example", 0, counts["module_example", 0]] = \
+					items["module_example", 0, counts["module_example", 0]] "\n"
 			}
 			continue
 		}
@@ -920,6 +933,12 @@ function parse_header(i, line, mode, rest)
 				append_text("module_usage", 0, rest)
 			}
 			mode = "usage"
+			continue
+		}
+		# How a script is run, kept line for line like a function's example.
+		if (line ~ /^@example([[:space:]]+|$)/) {
+			push_item("module_example", 0, trim(substr(line, 9)))
+			mode = "example"
 			continue
 		}
 		if (line ~ /^@see([[:space:]]+|$)/) {
@@ -988,6 +1007,9 @@ function parse_header(i, line, mode, rest)
 			append_text("module_desc", 0, line)
 		} else if (mode == "usage") {
 			append_text("module_usage", 0, line)
+		} else if (mode == "example" && counts["module_example", 0] > 0) {
+			key = "module_example" SUBSEP 0 SUBSEP counts["module_example", 0]
+			items[key] = (items[key] == "" ? line : items[key] "\n" line)
 		} else if (mode == "see" && trim(line) ~ /^-[[:space:]]+/) {
 			rest = trim(line)
 			push_item("module_see", 0, trim(substr(rest, 3)))
@@ -1011,6 +1033,35 @@ function has_command_line()
 {
 	return (counts["cli_option", 0] + counts["cli_arg", 0] + counts["cli_stdin", 0] \
 		+ counts["cli_stdout", 0] + counts["cli_stderr", 0] + counts["cli_exitcode", 0] > 0)
+}
+
+function example_label()
+{
+	return (counts["module_example", 0] == 1 ? "Example" : "Examples")
+}
+
+function print_module_examples(i)
+{
+	if (counts["module_example", 0] == 0) {
+		return
+	}
+	print_anchor("examples")
+	print "## " ic("🧪") example_label()
+	print ""
+	for (i = 1; i <= counts["module_example", 0]; i++) {
+		print "```bash"
+		print dedent(trim_trailing_blank(items["module_example", 0, i]))
+		print "```"
+		print ""
+	}
+}
+
+# Drop the blank lines a block ends with: the blank comment line that
+# separates it from the next tag belongs to neither.
+function trim_trailing_blank(text)
+{
+	sub(/\n+$/, "", text)
+	return text
 }
 
 function print_command_line()
@@ -1413,6 +1464,9 @@ function print_quick_links(i, nav, section_nav, section_name, has_tips)
 	if (has_command_line()) {
 		nav = append_nav_link(nav, "Command line", "Command line")
 	}
+	if (counts["module_example", 0] > 0) {
+		nav = append_nav_link(nav, example_label(), "Examples")
+	}
 	if (counts["module_see", 0] > 0) {
 		nav = append_nav_link(nav, "See also", "See also")
 	}
@@ -1553,6 +1607,7 @@ function render_module(i, desc, intro, usage, rest, n, j, line, in_rest)
 		print ""
 	}
 	print_command_line()
+	print_module_examples()
 	if (counts["module_see", 0] > 0) {
 		print_anchor("see-also")
 		print "## " ic("🔗") "See also"
@@ -1597,4 +1652,466 @@ function trim(s)
 	sub(/^[[:space:]]+/, "", s)
 	sub(/[[:space:]]+$/, "", s)
 	return s
+}
+
+# ---------------------------------------------------------------------------
+# The man page renderer. It reads the same collected state as `render_module`
+# and prints roff for man(7): the header tags fill the conventional sections,
+# and the functions of a library are listed under FUNCTIONS. Descriptions are
+# Markdown, so `md_to_roff` turns the parts of it a man page can show into
+# requests: paragraphs, headings, bullet lists, code blocks, and the inline
+# code, bold, italic and links of a line.
+# ---------------------------------------------------------------------------
+
+# Every line of the page goes through here. A `.PP` right after `.SH` or `.SS`
+# opens no paragraph, only a warning in man page linters, so it is dropped.
+function rp(line)
+{
+	if (line == ".PP" && roff_fresh) {
+		return
+	}
+	roff_fresh = (line ~ /^\.S[HS] /)
+	print line
+}
+
+# Backslashes are roff's escape character, so a literal one is written `\e`.
+function roff_escape(text)
+{
+	gsub(/\\/, "\\e", text)
+	return text
+}
+
+# In code and option names a hyphen is a minus sign: a plain `-` may be
+# typeset as a hyphen, and a command copied out of the page would then fail.
+function roff_minus(text)
+{
+	gsub(/-/, "\\-", text)
+	return text
+}
+
+# A text line that starts with `.` or `'` would be read as a request.
+function roff_line(text)
+{
+	if (text ~ /^[.']/) {
+		text = "\\&" text
+	}
+	return text
+}
+
+function md_inline(text, out, m)
+{
+	text = roff_escape(text)
+	out = ""
+	while (match(text, /`([^`]+)`/, m)) {
+		out = out substr(text, 1, RSTART - 1) "\\fB" roff_minus(m[1]) "\\fR"
+		text = substr(text, RSTART + RLENGTH)
+	}
+	text = out text
+	out = ""
+	# A page cannot be clicked, so a link keeps its URL, the way man pages
+	# write one; a link inside the document keeps only its text.
+	while (match(text, /\[([^]]+)\]\(([^)]+)\)/, m)) {
+		out = out substr(text, 1, RSTART - 1) m[1] \
+			(m[2] ~ /^[[:alpha:]][[:alnum:]+.-]*:\/\// ? " <" m[2] ">" : "")
+		text = substr(text, RSTART + RLENGTH)
+	}
+	text = out text
+	out = ""
+	while (match(text, /\*\*([^*]+)\*\*/, m)) {
+		out = out substr(text, 1, RSTART - 1) "\\fB" m[1] "\\fR"
+		text = substr(text, RSTART + RLENGTH)
+	}
+	text = out text
+	out = ""
+	while (match(text, /\*([^* ][^*]*)\*/, m)) {
+		out = out substr(text, 1, RSTART - 1) "\\fI" m[1] "\\fR"
+		text = substr(text, RSTART + RLENGTH)
+	}
+	return out text
+}
+
+# Print a block of Markdown as roff. `headings` says whether a `##` heading may
+# become a `.SS`; inside a function, which is itself a `.SS`, it becomes a bold
+# paragraph instead.
+function md_to_roff(text, headings, n, lines, i, line, in_code, para)
+{
+	n = split(text, lines, /\n/)
+	in_code = 0
+	para = 1
+	for (i = 1; i <= n; i++) {
+		line = lines[i]
+		if (in_code) {
+			if (line ~ /^[[:space:]]*```/) {
+				rp(".fi")
+				rp(".RE")
+				in_code = 0
+				para = 1
+			} else {
+				rp(roff_line(roff_minus(roff_escape(line))))
+			}
+			continue
+		}
+		if (line ~ /^[[:space:]]*```/) {
+			rp(".PP")
+			rp(".RS")
+			rp(".nf")
+			in_code = 1
+			continue
+		}
+		if (trim(line) == "") {
+			para = 1
+			continue
+		}
+		if (line ~ /^#+[[:space:]]/) {
+			sub(/^#+[[:space:]]+/, "", line)
+			if (headings) {
+				rp(".SS " md_inline(line))
+			} else {
+				rp(".PP")
+				rp("\\fB" md_inline(line) "\\fR")
+			}
+			para = 1
+			continue
+		}
+		if (line ~ /^[[:space:]]*[-*][[:space:]]+/) {
+			sub(/^[[:space:]]*[-*][[:space:]]+/, "", line)
+			rp(".IP \\(bu 2")
+			rp(roff_line(md_inline(line)))
+			para = 0
+			continue
+		}
+		if (para) {
+			rp(".PP")
+			para = 0
+		}
+		rp(roff_line(md_inline(trim(line))))
+	}
+	if (in_code) {
+		rp(".fi")
+		rp(".RE")
+	}
+}
+
+# A code block, set as it was written.
+function print_roff_code(text, n, lines, i)
+{
+	n = split(dedent(trim_trailing_blank(text)), lines, /\n/)
+	rp(".PP")
+	rp(".RS")
+	rp(".nf")
+	for (i = 1; i <= n; i++) {
+		rp(roff_line(roff_minus(roff_escape(lines[i]))))
+	}
+	rp(".fi")
+	rp(".RE")
+}
+
+# `-o <file> | --output=<file>` as `\fB\-o\fR \fIfile\fR, \fB\-\-output\fR=\fIfile\fR`.
+function roff_option_term(term, n, pieces, i, piece, out, pm, rest, m, done)
+{
+	n = split(term, pieces, /[[:blank:]]*\|[[:blank:]]*/)
+	out = ""
+	for (i = 1; i <= n; i++) {
+		piece = trim(pieces[i])
+		if (piece == "") {
+			continue
+		}
+		if (match(piece, /^(-[^[:blank:]=<]*)(.*)$/, pm)) {
+			rest = roff_escape(pm[2])
+			done = ""
+			while (match(rest, /<([^>]+)>/, m)) {
+				done = done substr(rest, 1, RSTART - 1) "\\fI" m[1] "\\fR"
+				rest = substr(rest, RSTART + RLENGTH)
+			}
+			piece = "\\fB" roff_minus(roff_escape(pm[1])) "\\fR" done rest
+		} else {
+			piece = roff_escape(piece)
+		}
+		out = out (out == "" ? "" : ", ") piece
+	}
+	return out
+}
+
+function print_roff_options(kind, idx, i, text, m)
+{
+	for (i = 1; i <= counts[kind, idx]; i++) {
+		text = items[kind, idx, i]
+		rp(".TP")
+		if (match(text, /^(((-[[:alnum:]]([[:blank:]]*<[^>]+>)?|--[[:alnum:]][[:alnum:]-]*((=|[[:blank:]]+)<[^>]+>)?)([[:blank:]]*\|?[[:blank:]]+))+)([^[:blank:]|<-].*)?$/, m)) {
+			rp(roff_option_term(trim(m[1])))
+			rp(roff_line(md_inline(trim(m[8]))))
+		} else {
+			rp(roff_line(md_inline(text)))
+		}
+	}
+}
+
+# `@arg` and `@env` entries: the name, then its type, whether it may be left
+# out and its default.
+function print_roff_params(kind, idx, is_arg, i, text, p, label)
+{
+	for (i = 1; i <= counts[kind, idx]; i++) {
+		text = items[kind, idx, i]
+		rp(".TP")
+		if (! parse_param(text, p) || (is_arg && p["name"] !~ /^\$/)) {
+			rp(roff_line(md_inline(text)))
+			continue
+		}
+		label = p["type"]
+		if (p["optional"]) {
+			label = label ", optional"
+		}
+		if (p["has_default"]) {
+			label = label ", default: \\fB" roff_minus(roff_escape(p["default"])) "\\fR"
+		}
+		rp((is_arg ? "\\fI" : "\\fB") roff_escape(p["name"]) "\\fR (" label ")")
+		rp(roff_line(md_inline(p["desc"])))
+	}
+}
+
+function print_roff_exitcodes(kind, idx, i, text, m)
+{
+	for (i = 1; i <= counts[kind, idx]; i++) {
+		text = items[kind, idx, i]
+		rp(".TP")
+		if (match(text, /^([^[:space:]]+)[[:space:]]+(.*)$/, m)) {
+			rp("\\fB" roff_escape(m[1]) "\\fR")
+			rp(roff_line(md_inline(m[2])))
+		} else {
+			rp(roff_line(md_inline(text)))
+		}
+	}
+}
+
+function print_roff_paragraphs(kind, idx, i)
+{
+	for (i = 1; i <= counts[kind, idx]; i++) {
+		rp(".PP")
+		rp(roff_line(md_inline(items[kind, idx, i])))
+	}
+}
+
+function print_roff_bullets(kind, idx, i)
+{
+	for (i = 1; i <= counts[kind, idx]; i++) {
+		rp(".IP \\(bu 2")
+		rp(roff_line(md_inline(items[kind, idx, i])))
+	}
+}
+
+# A labelled block inside a function, such as its arguments.
+function print_roff_label(label)
+{
+	rp(".PP")
+	rp("\\fB" label "\\fR")
+}
+
+# A `@see` entry as a man page names it: `name(1)` in bold with its section,
+# a link by its text, anything else as written.
+function roff_see(text, m)
+{
+	text = normalize_see(text)
+	if (match(text, /^([^[:space:]()]+)\(([0-9][[:alnum:]]*)\)$/, m)) {
+		return "\\fB" roff_escape(m[1]) "\\fR(" m[2] ")"
+	}
+	return md_inline(text)
+}
+
+function normalize_see(text)
+{
+	text = trim(text)
+	gsub(/^`+|`+$/, "", text)
+	return text
+}
+
+function print_roff_see(kind, idx, i, n)
+{
+	n = counts[kind, idx]
+	for (i = 1; i <= n; i++) {
+		rp(roff_line(roff_see(items[kind, idx, i]) (i < n ? "," : "")))
+	}
+}
+
+function man_name(name)
+{
+	name = (module_file != "" ? module_file : source_path)
+	sub(/^.*\//, "", name)
+	return (name == "" ? "untitled" : name)
+}
+
+function print_roff_function(idx, i, key)
+{
+	rp(".SS " roff_minus(roff_escape(fn_name[idx])))
+	if (counts["fn_deprecated", idx] > 0) {
+		rp(".PP")
+		rp("\\fBDeprecated:\\fR")
+		for (i = 1; i <= counts["fn_deprecated", idx]; i++) {
+			rp(roff_line(md_inline(items["fn_deprecated", idx, i])))
+		}
+	}
+	if (fn_since[idx] != "") {
+		rp(".PP")
+		rp("Since " roff_escape(fn_since[idx]) ".")
+	}
+	key = "fn_desc" SUBSEP idx
+	if (key in texts) {
+		md_to_roff(dedent_doc(texts[key]), 0)
+	}
+	for (i = 1; i <= counts["fn_warning", idx]; i++) {
+		rp(".PP")
+		rp("\\fBWarning:\\fR " md_inline(items["fn_warning", idx, i]))
+	}
+	for (i = 1; i <= counts["fn_example", idx]; i++) {
+		print_roff_code(items["fn_example", idx, i])
+	}
+	if (fn_noargs[idx]) {
+		rp(".PP")
+		rp("Takes no arguments.")
+	}
+	if (counts["fn_option", idx] > 0) {
+		print_roff_label("Options")
+		print_roff_options("fn_option", idx)
+	}
+	if (counts["fn_arg", idx] > 0) {
+		print_roff_label("Arguments")
+		print_roff_params("fn_arg", idx, 1)
+	}
+	if (counts["fn_env", idx] > 0) {
+		print_roff_label("Environment")
+		print_roff_params("fn_env", idx, 0)
+	}
+	if (counts["fn_set", idx] > 0) {
+		print_roff_label("Sets")
+		print_roff_params("fn_set", idx, 0)
+	}
+	if (counts["fn_note", idx] > 0) {
+		print_roff_label("Notes")
+		print_roff_bullets("fn_note", idx)
+	}
+	if (counts["fn_stdin", idx] > 0) {
+		print_roff_label("Standard input")
+		print_roff_bullets("fn_stdin", idx)
+	}
+	if (counts["fn_stdout", idx] > 0) {
+		print_roff_label("Standard output")
+		print_roff_bullets("fn_stdout", idx)
+	}
+	if (counts["fn_stderr", idx] > 0) {
+		print_roff_label("Standard error")
+		print_roff_bullets("fn_stderr", idx)
+	}
+	if (counts["fn_exitcode", idx] > 0) {
+		print_roff_label("Exit status")
+		print_roff_exitcodes("fn_exitcode", idx)
+	}
+	if (counts["fn_see", idx] > 0) {
+		print_roff_label("See also")
+		rp(".PP")
+		print_roff_see("fn_see", idx)
+	}
+}
+
+function render_man(name, i, j, usage, desc, th, p)
+{
+	name = man_name()
+	# The date is whatever `man_date` says, never today's: a page dated by the
+	# day it was generated would differ on every run, and committed pages are
+	# compared byte for byte.
+	th = ".TH " toupper(roff_minus(roff_escape(name)))
+	th = th " " (man_section != "" ? man_section : "1")
+	th = th " \"" roff_escape(man_date) "\""
+	th = th " \"" roff_escape(name) (module_since != "" ? " " roff_escape(module_since) : "") "\""
+	rp(th)
+	rp(".SH NAME")
+	rp(roff_minus(roff_escape(name)) (module_brief != "" ? " \\- " md_inline(module_brief) : ""))
+	rp(".SH SYNOPSIS")
+	usage = texts["module_usage", 0]
+	sub(/\n+$/, "", usage)
+	if (usage != "") {
+		md_to_roff(dedent_doc(usage), 0)
+	} else {
+		rp(".B " roff_minus(roff_escape(name)))
+		if (counts["cli_option", 0] > 0) {
+			rp("[\\fIOPTION\\fR]...")
+		}
+		for (i = 1; i <= counts["cli_arg", 0]; i++) {
+			if (parse_param(items["cli_arg", 0, i], p) && p["name"] ~ /^\$[1-9]/) {
+				rp((p["optional"] ? "[\\fI" : "\\fI") toupper(p["name"] == "" ? "arg" : substr(p["name"], 2)) "\\fR" (p["optional"] ? "]" : ""))
+			}
+		}
+	}
+	desc = texts["module_desc", 0]
+	if (desc != "" || counts["module_deprecated", 0] > 0) {
+		rp(".SH DESCRIPTION")
+		if (counts["module_deprecated", 0] > 0) {
+			rp(".PP")
+			rp("\\fBDeprecated:\\fR")
+			for (i = 1; i <= counts["module_deprecated", 0]; i++) {
+				rp(roff_line(md_inline(items["module_deprecated", 0, i])))
+			}
+		}
+		if (desc != "") {
+			md_to_roff(dedent_doc(desc), 1)
+		}
+	}
+	if (counts["cli_option", 0] > 0) {
+		rp(".SH OPTIONS")
+		print_roff_options("cli_option", 0)
+	}
+	if (counts["cli_arg", 0] > 0) {
+		rp(".SH ARGUMENTS")
+		print_roff_params("cli_arg", 0, 1)
+	}
+	if (counts["cli_stdin", 0] > 0) {
+		rp(".SH STDIN")
+		print_roff_paragraphs("cli_stdin", 0)
+	}
+	if (counts["cli_stdout", 0] > 0) {
+		rp(".SH STDOUT")
+		print_roff_paragraphs("cli_stdout", 0)
+	}
+	if (counts["cli_stderr", 0] > 0) {
+		rp(".SH STDERR")
+		print_roff_paragraphs("cli_stderr", 0)
+	}
+	if (counts["module_env", 0] > 0) {
+		rp(".SH ENVIRONMENT")
+		print_roff_params("module_env", 0, 0)
+	}
+	if (counts["cli_exitcode", 0] > 0) {
+		rp(".SH EXIT STATUS")
+		print_roff_exitcodes("cli_exitcode", 0)
+	}
+	if (counts["module_example", 0] > 0) {
+		rp(".SH EXAMPLES")
+		for (i = 1; i <= counts["module_example", 0]; i++) {
+			print_roff_code(items["module_example", 0, i])
+		}
+	}
+	if (fn_count > 0) {
+		rp(".SH FUNCTIONS")
+		for (i = 1; i <= fn_count; i++) {
+			print_roff_function(i)
+		}
+	}
+	if (has_any_tips()) {
+		rp(".SH NOTES")
+		print_roff_bullets("module_tip", 0)
+		for (i = 1; i <= fn_count; i++) {
+			for (j = 1; j <= counts["fn_tip", i]; j++) {
+				rp(".IP \\(bu 2")
+				rp("\\fB" roff_minus(roff_escape(fn_name[i])) "\\fR: " md_inline(items["fn_tip", i, j]))
+			}
+		}
+	}
+	if (counts["module_see", 0] > 0) {
+		rp(".SH SEE ALSO")
+		print_roff_see("module_see", 0)
+	}
+	if (counts["module_license", 0] > 0) {
+		rp(".SH LICENSE")
+		for (i = 1; i <= counts["module_license", 0]; i++) {
+			rp(roff_line(md_inline(items["module_license", 0, i])))
+		}
+	}
 }

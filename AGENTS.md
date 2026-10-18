@@ -4,7 +4,7 @@ sh-docs is a GNU awk program with a thin bash wrapper. The awk program is the
 product; the README, the example and the tests are fixtures that describe the
 public annotation language.
 
-* `sh-docs.awk` — the parser and the renderer.
+* `sh-docs.awk` — the parser and the two renderers, Markdown and man.
 * `sh-docs` — argument handling only: it maps command-line options onto awk
   variables, reads a file or stdin, and writes stdout or `--output`.
 * `examples/readme-example.sh` / `.md` — the worked example, regenerated with
@@ -71,6 +71,10 @@ path rule belongs there, not inline.
 * The wrapper exits 0 when nothing was found, 1 for a finding (`--check`,
   `--strict`) and 2 for an error, through `_die`. A new failure picks one of
   the two on purpose.
+* The man renderer (`render_man` and the `roff_*` helpers) prints through
+  `rp`, which drops a `.PP` that follows `.SH` or `.SS`. Text goes through
+  `md_inline` or `roff_escape`, and a line that starts with `.` or `'` through
+  `roff_line`. A man page carries no date unless `man_date` gives one.
 * `@section` is not sticky by design: each documented function carries its own.
   Do not change that without updating the README and the testcases that rely on
   it.

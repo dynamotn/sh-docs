@@ -14,7 +14,7 @@ repos:
         entry: make strict
         language: system
         pass_filenames: false
-        files: ^(sh-docs|sh-docs\.awk|tests/run_tests|tests/lib\.sh|examples/.*\.sh)$
+        files: ^(sh-docs|sh-docs\.awk|contrib/github-action\.sh|tests/run_tests|tests/lib\.sh|examples/.*\.sh)$
       - id: make-check-examples
         name: make check-examples
         entry: make check-examples

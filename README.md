@@ -228,6 +228,17 @@ printed in a "Command line" section after the usage.
 # @exitcode 1 No name was given.
 ```
 
+#### `@example`
+
+How a script is run, printed in an "Examples" section after the command line,
+one code block per tag. Indentation and blank lines are kept, as in a
+function's `@example`.
+
+```bash
+# @example
+#   greet --loud World
+```
+
 #### `@since`
 
 The version the module first appeared in, printed under the brief.
@@ -491,6 +502,28 @@ a function moves its line, and a committed document would go stale with it.
 `--no-emoji` prints every heading, label and callout without its emoji. The
 anchors do not change.
 
+### Man pages
+
+`--format man` renders the same annotations as a roff man page instead of
+Markdown. The header fills the conventional sections: NAME from `@file` and
+`@brief`, SYNOPSIS from `@usage`, then DESCRIPTION, OPTIONS, ARGUMENTS, STDIN,
+STDOUT, STDERR, ENVIRONMENT, EXIT STATUS, EXAMPLES, NOTES (the tips), SEE ALSO
+and LICENSE. The functions of a library are listed under FUNCTIONS. Markdown in
+a description becomes roff: paragraphs, headings, bullet lists, code blocks,
+inline code, bold, italic, and links, which keep their URL.
+
+```bash
+sh-docs --format man --man-date "$(git log -1 --format=%cs -- bin/greet)" \
+  bin/greet -o man/greet.1
+sh-docs --format man --man-section 3 --output-dir man src/*.sh
+```
+
+`--man-section` sets the section, 1 by default, and under `--output-dir` the
+extension of each page. The page carries no date unless `--man-date` gives
+one: dated by the day it was generated, it would differ on every run, and
+`--check` would always report it stale. The last commit date of the source, as
+above, is a date that only moves when the source does.
+
 ### prek and pre-commit
 
 The repository ships two hooks, for [prek](https://github.com/j178/prek) and
@@ -522,6 +555,11 @@ Options:
       --output-dir DIR      write one document per FILE into DIR, named after
                             it without its shell extension
       --index               with --output-dir, also write DIR/index.md
+      --format FORMAT       markdown (the default), or man for a roff man page
+      --man-section N       the section of a man page (default: 1); under
+                            --output-dir, also the extension of each page
+      --man-date DATE       the date in the header of a man page; none by
+                            default, so the page stays the same on every run
       --check               compare the document with the one in --output
                             instead of writing it; print a diff when it is
                             missing or out of date
@@ -547,11 +585,6 @@ Options:
                             (default: example)
   -h, --help                show this help and exit
   -V, --version             show version information and exit
-
-Exit status:
-  0  the documents were generated, and nothing was found
-  1  --check found a document missing or stale, or --strict reported a problem
-  2  the invocation was invalid, an input was unreadable, or awk failed
 ```
 
 The exit status follows `diff` and `grep`: 0 when the documents were generated

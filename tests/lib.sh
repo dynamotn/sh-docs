@@ -37,6 +37,18 @@ function tests::run {
   set -e
 }
 
+# @description Run any command and collect its output, as `tests::run` does
+#   for sh-docs.
+# @arg $@ any The command and its arguments
+# @set TESTS_EXITCODE number The exit code the command returned
+# @stdout Nothing; the output is captured in the `stdout` file
+function tests::run_command {
+  set +e
+  "$@" < /dev/null > stdout 2> stderr
+  TESTS_EXITCODE=$?
+  set -e
+}
+
 # @description Fail the testcase with a message and whatever context has been
 #   collected so far.
 # @arg $1 string The message to report

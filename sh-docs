@@ -66,6 +66,11 @@ Options:
       --output-dir DIR      write one document per FILE into DIR, named after
                             it without its shell extension
       --index               with --output-dir, also write DIR/index.md
+      --format FORMAT       markdown (the default), or man for a roff man page
+      --man-section N       the section of a man page (default: 1); under
+                            --output-dir, also the extension of each page
+      --man-date DATE       the date in the header of a man page; none by
+                            default, so the page stays the same on every run
       --check               compare the document with the one in --output
                             instead of writing it; print a diff when it is
                             missing or out of date
@@ -102,6 +107,7 @@ Examples:
   sh-docs --source-path lib/strings.sh lib/strings.sh -o docs/strings.md
   sh-docs --check src/strings.sh -o docs/strings.md
   sh-docs --output-dir docs --index src/*.sh
+  sh-docs --format man --man-date 2026-10-19 bin/greet -o greet.1
 EOF
 }
 
@@ -204,9 +210,11 @@ function _deliver {
 }
 
 # @description The document a source is written to under --output-dir: its
-#   file name with a shell extension dropped, and `.md` added.
+#   file name with a shell extension dropped, and the extension of the format
+#   added.
 # @arg $1 string The source
 # @arg $2 string The output directory
+# @arg $3 string The extension, without its dot
 # @stdout The path of the document
 function _doc_path {
   local _name="${1##*/}"
@@ -215,7 +223,7 @@ function _doc_path {
     *.sh | *.bash | *.zsh | *.ksh) _name="${_name%.*}" ;;
     *) ;;
   esac
-  printf '%s/%s.md' "$2" "${_name}"
+  printf '%s/%s.%s' "$2" "${_name}" "$3"
 }
 
 # @description Render every source into --output-dir, and the index when
@@ -224,20 +232,21 @@ function _doc_path {
 #   failed for any file
 # @arg $2 string The output directory
 # @arg $3 number 1 to write the index as well
-# @arg $@ any The sources, after the first three arguments
+# @arg $4 string The extension of each document, without its dot
+# @arg $@ any The sources, after the first four arguments
 # @exitcode 0 Every document was delivered
 # @exitcode 2 A source is unreadable, two sources share a document, or awk
 #   failed
 function _render_dir {
-  local _failed_var="$1" _output_dir="$2" _index_wanted="$3"
+  local _failed_var="$1" _output_dir="$2" _index_wanted="$3" _extension="$4"
   local _source _path _rendered _index='' _name _brief _i
   local -a _inputs=() _paths=()
-  shift 3
+  shift 4
   _inputs=("$@")
 
   for _source in "${_inputs[@]}"; do
     [[ -r ${_source} ]] || _die "cannot read input file: ${_source}"
-    _path="$(_doc_path "${_source}" "${_output_dir}")"
+    _path="$(_doc_path "${_source}" "${_output_dir}" "${_extension}")"
     for ((_i = 0; _i < ${#_paths[@]}; _i++)); do
       [[ ${_paths[_i]} != "${_path}" ]] \
         || _die "${_inputs[_i]} and ${_source} would both be written to ${_path}"
@@ -275,6 +284,7 @@ function _render_dir {
 #   failed
 function _main {
   local _output='' _output_dir='' _rendered _value _source
+  local _format=markdown _man_section=1
   local -i _check=0 _failed=0 _index_wanted=0 _has_source_path=0
   local -a _awk_vars=() _inputs=()
 
@@ -322,9 +332,11 @@ function _main {
         shift
         ;;
       --src-dir | --doc-dir | --root-files | --source-path | --link-dirs | \
-        --example-dir | --example-prefix)
+        --example-dir | --example-prefix | --format | --man-section | --man-date)
         _need_value "$1" $#
         [[ $1 != --source-path ]] || _has_source_path=1
+        [[ $1 != --format ]] || _format="$2"
+        [[ $1 != --man-section ]] || _man_section="$2"
         # awk reads escape sequences in a `-v` value, so `lib\new` would
         # arrive as `lib`, a newline and `ew` unless every backslash is doubled.
         _value="${2//\\/\\\\}"
@@ -332,8 +344,11 @@ function _main {
         shift 2
         ;;
       --src-dir=* | --doc-dir=* | --root-files=* | --source-path=* | \
-        --link-dirs=* | --example-dir=* | --example-prefix=*)
+        --link-dirs=* | --example-dir=* | --example-prefix=* | --format=* | \
+        --man-section=* | --man-date=*)
         [[ $1 != --source-path=* ]] || _has_source_path=1
+        [[ $1 != --format=* ]] || _format="${1#*=}"
+        [[ $1 != --man-section=* ]] || _man_section="${1#*=}"
         _value="${1#*=}"
         _value="${_value//\\/\\\\}"
         _awk_vars+=(-v "$(_awk_var "${1%%=*}")=${_value}")
@@ -358,10 +373,16 @@ function _main {
     esac
   done
 
+  [[ ${_format} == markdown || ${_format} == man ]] \
+    || _die "unknown format: ${_format} (markdown or man)"
+  [[ ${_man_section} =~ ^[1-9][[:alnum:]]*$ ]] \
+    || _die "invalid man section: ${_man_section}"
   [[ -z ${_output} || -z ${_output_dir} ]] \
     || _die '--output and --output-dir cannot be combined'
   ((! _index_wanted)) || [[ -n ${_output_dir} ]] \
     || _die '--index needs --output-dir'
+  ((! _index_wanted)) || [[ ${_format} == markdown ]] \
+    || _die '--index lists Markdown documents; it does not take --format man'
   if [[ -n ${_output_dir} ]]; then
     # Standard input has no name to derive a document from.
     ((${#_inputs[@]})) || _die '--output-dir needs input files'
@@ -382,7 +403,12 @@ function _main {
     || _die "cannot read the awk program at ${AWK_PROGRAM}"
 
   if [[ -n ${_output_dir} ]]; then
-    _render_dir _failed "${_output_dir}" "${_index_wanted}" "${_inputs[@]}"
+    if [[ ${_format} == man ]]; then
+      _value="${_man_section}"
+    else
+      _value=md
+    fi
+    _render_dir _failed "${_output_dir}" "${_index_wanted}" "${_value}" "${_inputs[@]}"
   else
     _source="${_inputs[0]-}"
     if [[ -n ${_source} && ${_source} != - ]]; then
